@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmniChurch Connect — Plateforme de gestion des Églises</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#111A2E;--navy2:#182542;--navy3:#203050;--gold:#C9A227;--gold2:#E4C558;--ivory:#EDE7DA;--muted:#8B94A8;--ok:#3BB273;--err:#E0564B;--line:rgba(201,162,39,.22)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;background:radial-gradient(ellipse at 20% -10%,#1B2C50 0%,var(--navy) 55%);color:var(--ivory);font-family:'Inter',sans-serif;display:flex;flex-direction:column}
+body::after{content:"";position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px}
+.logo{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:700;letter-spacing:.04em;text-align:center}
+.logo b{color:var(--gold)}
+.tagline{font-family:'Space Grotesk',monospace;font-size:11px;letter-spacing:.35em;color:var(--muted);text-transform:uppercase;margin-top:8px;text-align:center}
+.card{width:100%;max-width:440px;background:linear-gradient(180deg,var(--navy2),rgba(24,37,66,.6));border:1px solid var(--line);border-radius:14px;padding:34px 32px;margin-top:34px;box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.tabs{display:flex;gap:8px;margin-bottom:24px}
+.tab{flex:1;text-align:center;padding:10px;border-radius:9px;background:rgba(16,26,46,.6);border:1px solid var(--line);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.03em}
+.tab.on{background:linear-gradient(135deg,rgba(201,162,39,.16),rgba(201,162,39,.05));color:var(--gold2);border-color:rgba(201,162,39,.5)}
+label{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+input{width:100%;background:rgba(10,16,30,.7);border:1px solid var(--line);border-radius:9px;padding:12px 14px;color:var(--ivory);font-size:14px;font-family:inherit;outline:none}
+input:focus{border-color:var(--gold)}
+.btn{width:100%;margin-top:22px;padding:13px;border:none;border-radius:9px;background:linear-gradient(135deg,var(--gold),#a8871e);color:#101523;font-weight:700;font-size:14px;letter-spacing:.05em;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.5}
+.foot{position:relative;z-index:1;text-align:center;padding:18px;font-size:11px;color:var(--muted)}
+.foot a{color:var(--gold);text-decoration:none}
+.err{background:rgba(224,86,75,.12);border:1px solid rgba(224,86,75,.4);color:#f2a49d;padding:11px 13px;border-radius:9px;font-size:13px;margin-top:14px;display:none}
+.msg{background:rgba(59,178,115,.12);border:1px solid rgba(59,178,115,.4);color:#9fdcb9;padding:11px 13px;border-radius:9px;font-size:13px;margin-top:14px;display:none}
+.lang{position:fixed;top:16px;right:18px;z-index:2;font-family:'Space Grotesk',monospace;font-size:11px;letter-spacing:.2em;color:var(--muted);background:none;border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
+.lang:hover{color:var(--gold)}
+.feat{display:flex;gap:26px;margin-top:26px;flex-wrap:wrap;justify-content:center}
+.feat div{font-size:11px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;font-family:'Space Grotesk',monospace}
+.feat b{color:var(--gold);margin-right:6px}
+</style>
+</head>
+<body>
+<button class="lang" id="btnLang" onclick="toggleLang()">FR · EN</button>
+<div class="wrap">
+  <div class="logo">OMNI<b>CHURCH</b> CONNECT</div>
+  <div class="tagline" id="tg">Plateforme intégrée de gestion des Églises</div>
+  <div class="feat">
+    <div><b>✦</b><span id="f1">Multi-Églises</span></div>
+    <div><b>✦</b><span id="f2">Sécurisée & isolée</span></div>
+    <div><b>✦</b><span id="f3">Français / English</span></div>
+  </div>
+  <div class="card">
+    <div class="tabs">
+      <div class="tab on" id="tabL" onclick="affiche('login')"><span class="i18n" data-fr="Connexion" data-en="Sign in">Connexion</span></div>
+      <div class="tab" id="tabS" onclick="affiche('signup')"><span class="i18n" data-fr="Inscription d'une Église" data-en="Register a Church">Inscription d'une Église</span></div>
+    </div>
+
+    <form id="fLogin" onsubmit="connexion(event)">
+      <label><span class="i18n" data-fr="Adresse e-mail" data-en="Email address">Adresse e-mail</span></label>
+      <input id="l-email" type="email" required autocomplete="email">
+      <label><span class="i18n" data-fr="Mot de passe" data-en="Password">Mot de passe</span></label>
+      <input id="l-mdp" type="password" required autocomplete="current-password">
+      <button class="btn"><span class="i18n" data-fr="Se connecter" data-en="Sign in">Se connecter</span></button>
+    </form>
+
+    <form id="fSignup" style="display:none" onsubmit="inscrire(event)">
+      <label><span class="i18n" data-fr="Nom de l'Église *" data-en="Church name *">Nom de l'Église *</span></label>
+      <input id="s-nom" required>
+      <label><span class="i18n" data-fr="Responsable principal *" data-en="Main leader *">Responsable principal *</span></label>
+      <input id="s-resp" required>
+      <div style="display:flex;gap:12px">
+        <div style="flex:1"><label><span class="i18n" data-fr="Pays" data-en="Country">Pays</span></label><input id="s-pays" value="RDC"></div>
+        <div style="flex:1"><label><span class="i18n" data-fr="Ville" data-en="City">Ville</span></label><input id="s-ville"></div>
+      </div>
+      <label>E-mail *</label>
+      <input id="s-email" type="email" required>
+      <label><span class="i18n" data-fr="Téléphone" data-en="Phone">Téléphone</span></label>
+      <input id="s-tel">
+      <label><span class="i18n" data-fr="Mot de passe * (8 caractères min.)" data-en="Password * (min. 8 characters)">Mot de passe * (8 caractères min.)</span></label>
+      <input id="s-mdp" type="password" minlength="8" required>
+      <button class="btn"><span class="i18n" data-fr="Créer l'espace de mon Église" data-en="Create my Church space">Créer l'espace de mon Église</span></button>
+      <div class="msg" id="s-ok"></div>
+    </form>
+
+    <div class="err" id="err"></div>
+  </div>
+</div>
+<div class="foot">OmniChurch Connect · <a href="https://wa.me/243977555768">Inspire by YuuStore</a></div>
+<script>
+// shim : expose les éléments par id en variable globale avec underscore (l-email → l_email)
+document.querySelectorAll("[id]").forEach(function(e){ var v = e.id.replace(/-/g, "_"); if(!(v in window)) window[v] = e; });
+
+const API = location.origin + "/api";
+let lang = localStorage.getItem("oc_lang") || "fr";
+function toggleLang(){ lang = lang === "fr" ? "en" : "fr"; localStorage.setItem("oc_lang", lang); applique(); }
+function applique(){
+  document.querySelectorAll(".i18n").forEach(e => { e.textContent = lang === "fr" ? (e.dataset.fr || e.textContent) : (e.dataset.en || e.dataset.fr || e.textContent); });
+  document.getElementById("tg").textContent = lang === "fr" ? "Plateforme intégrée de gestion des Églises" : "Integrated Church management platform";
+  document.getElementById("f1").textContent = lang === "fr" ? "Multi-Églises" : "Multi-Church";
+  document.getElementById("f2").textContent = lang === "fr" ? "Sécurisée & isolée" : "Secure & isolated";
+  document.getElementById("f3").textContent = lang === "fr" ? "Français / English" : "French / English";
+}
+function affiche(q){ document.getElementById("fLogin").style.display = q==="login"?"":"none"; document.getElementById("fSignup").style.display = q==="login"?"none":""; document.getElementById("tabL").className="tab"+(q==="login"?" on":""); document.getElementById("tabS").className="tab"+(q==="signup"?" on":""); document.getElementById("err").style.display="none"; }
+function montre(el, texte){ const e=document.getElementById(el); e.textContent=texte; e.style.display="block"; }
+async function api(chemin, donnees){ const r = await fetch(API+chemin,{method:"POST",headers:{"Content-Type":"application/json","X-Auth-Token":localStorage.getItem("oc_token")||""},body:JSON.stringify(donnees||{})}); return r.json(); }
+async function connexion(ev){
+  ev.preventDefault(); document.getElementById("err").style.display="none";
+  const d = await api("/auth/login/", {email:l_email.value, mot_de_passe:l_mdp.value});
+  if(d.success){ localStorage.setItem("oc_token", d.data.token); location.href="/app/"; }
+  else montre("err", d.error);
+}
+async function inscrire(ev){
+  ev.preventDefault(); document.getElementById("err").style.display="none"; document.getElementById("s-ok").style.display="none";
+  const d = await api("/auth/inscription-eglise/", {
+    nom_eglise:s_nom.value, responsable:s_resp.value, pays:s_pays.value, ville:s_ville.value,
+    email:s_email.value, telephone:s_tel.value, mot_de_passe:s_mdp.value});
+  if(d.success){
+    montre("s-ok", lang==="fr" ? "Espace créé ✓ Vous êtes administrateur principal. Ouverture du tableau de bord…" : "Space created ✓ You are the main administrator. Opening dashboard…");
+    localStorage.setItem("oc_token", d.data.token);
+    setTimeout(()=>location.href="/app/", 900);
+  } else montre("err", d.error);
+}
+applique();
+</script>
+</body>
+</html>

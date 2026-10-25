@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmniChurch Connect — Administration</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#111A2E;--navy2:#182542;--navy3:#203050;--gold:#C9A227;--gold2:#E4C558;--ivory:#EDE7DA;--muted:#8B94A8;--ok:#3BB273;--err:#E0564B;--line:rgba(201,162,39,.22)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:radial-gradient(ellipse at 15% -10%,#1B2C50 0%,var(--navy) 60%);color:var(--ivory);font-family:'Inter',sans-serif;min-height:100vh;display:flex}
+body::after{content:"";position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.045'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
+aside{position:relative;z-index:1;width:250px;min-width:250px;background:linear-gradient(180deg,rgba(16,26,46,.96),rgba(13,20,38,.96));border-right:1px solid var(--line);padding:26px 0;display:flex;flex-direction:column}
+.brand{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:700;padding:0 24px 6px}
+.brand b{color:var(--gold)}
+.church-name{font-family:'Space Grotesk',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);padding:0 24px 22px;border-bottom:1px solid var(--line)}
+.nav{flex:1;padding-top:14px}
+.nv{display:flex;align-items:center;gap:11px;padding:12px 24px;font-size:13.5px;color:var(--muted);cursor:pointer;border-left:3px solid transparent;letter-spacing:.02em}
+.nv:hover{color:var(--ivory)}
+.nv.on{color:var(--gold2);background:linear-gradient(90deg,rgba(201,162,39,.12),transparent);border-left-color:var(--gold)}
+.nv .b{font-size:10px;background:rgba(201,162,39,.2);color:var(--gold2);border-radius:8px;padding:2px 7px;display:none}
+.side-foot{padding:16px 24px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+.side-foot a{color:var(--gold);text-decoration:none}
+main{position:relative;z-index:1;flex:1;padding:34px 38px;overflow-x:hidden}
+h1{font-family:'Cormorant Garamond',serif;font-size:29px;font-weight:600}
+.kicker{font-family:'Space Grotesk',monospace;font-size:10px;letter-spacing:.3em;color:var(--gold);text-transform:uppercase;margin-bottom:6px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:26px}
+.stat{background:linear-gradient(160deg,var(--navy2),rgba(24,37,66,.5));border:1px solid var(--line);border-radius:13px;padding:20px}
+.stat .n{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:700;color:var(--gold2)}
+.stat .l{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+table{width:100%;border-collapse:collapse;margin-top:22px;font-size:13px}
+th{font-family:'Space Grotesk',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+td{padding:11px 12px;border-bottom:1px solid rgba(139,148,168,.12)}
+tr:hover td{background:rgba(201,162,39,.04)}
+.pill{display:inline-block;font-size:10.5px;letter-spacing:.06em;padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--gold2);background:rgba(201,162,39,.08)}
+.pill.bad{color:#f2a49d;border-color:rgba(224,86,75,.35);background:rgba(224,86,75,.08)}
+.pill.okk{color:#9fdcb9;border-color:rgba(59,178,115,.35);background:rgba(59,178,115,.08)}
+button.act{background:none;border:1px solid var(--line);color:var(--muted);border-radius:7px;padding:5px 11px;font-size:11.5px;cursor:pointer;font-family:inherit;margin-right:5px}
+button.act:hover{color:var(--gold2);border-color:var(--gold)}
+button.act.danger:hover{color:#f2a49d;border-color:var(--err)}
+.btn{background:linear-gradient(135deg,var(--gold),#a8871e);border:none;color:#101523;font-weight:700;padding:11px 20px;border-radius:9px;cursor:pointer;font-size:13px;font-family:inherit;letter-spacing:.03em}
+.btn.ghost{background:none;border:1px solid var(--line);color:var(--gold2);font-weight:600}
+.panel{background:linear-gradient(170deg,var(--navy2),rgba(24,37,66,.4));border:1px solid var(--line);border-radius:14px;padding:26px;margin-top:24px;max-width:640px}
+label{display:block;font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin:13px 0 6px}
+input,select{width:100%;background:rgba(10,16,30,.7);border:1px solid var(--line);border-radius:9px;padding:11px 13px;color:var(--ivory);font-size:13.5px;font-family:inherit;outline:none}
+input:focus,select:focus{border-color:var(--gold)}
+.row{display:flex;gap:14px;flex-wrap:wrap}
+.row>div{flex:1;min-width:150px}
+.mod-back{position:fixed;inset:0;background:rgba(5,9,18,.72);z-index:10;display:none;align-items:center;justify-content:center;padding:20px}
+.mod{width:100%;max-width:520px;background:linear-gradient(170deg,#1B2947,#131F38);border:1px solid rgba(201,162,39,.35);border-radius:16px;padding:28px;max-height:88vh;overflow-y:auto}
+.mod h3{font-family:'Cormorant Garamond',serif;font-size:22px;margin-bottom:6px}
+.mod .x{float:right;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
+.perm-grid{margin-top:16px}
+.perm-grid .pm{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(139,148,168,.12);font-size:13px}
+.perm-grid .acts{display:flex;gap:6px;flex-wrap:wrap}
+.ck{background:rgba(10,16,30,.7);border:1px solid var(--line);color:var(--muted);font-size:10.5px;padding:4px 9px;border-radius:7px;cursor:pointer;font-family:inherit}
+.ck.on{color:#101523;background:var(--gold);border-color:var(--gold);font-weight:600}
+.toast{position:fixed;bottom:26px;right:26px;background:#1B2947;border:1px solid var(--line);color:var(--gold2);padding:14px 20px;border-radius:11px;font-size:13px;z-index:20;display:none;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.toast.bad{color:#f2a49d;border-color:rgba(224,86,75,.4)}
+.lang{position:fixed;top:14px;right:18px;z-index:5;font-family:'Space Grotesk',monospace;font-size:10px;letter-spacing:.2em;color:var(--muted);background:rgba(16,26,46,.8);border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer}
+@media(max-width:900px){aside{position:fixed;top:0;bottom:0;left:-260px;transition:left .25s;z-index:11}body.menu aside{left:0}main{padding:20px 16px}.burger{display:block!important}}
+.burger{display:none;position:fixed;top:14px;left:14px;z-index:12;background:rgba(16,26,46,.9);border:1px solid var(--line);color:var(--gold);border-radius:9px;width:40px;height:40px;font-size:18px;cursor:pointer}
+.muted{color:var(--muted);font-size:12px;margin-top:14px}
+</style>
+</head>
+<body>
+<button class="burger" onclick="document.body.classList.toggle('menu')">☰</button>
+<button class="lang" onclick="toggleLang()">FR · EN</button>
+<aside>
+  <div class="brand">OMNI<b>CHURCH</b> CONNECT</div>
+  <div class="church-name" id="nom-eglise">…</div>
+  <div class="nav" id="nav"></div>
+  <div class="side-foot">
+    <span id="user-email">…</span><br><br>
+    <button class="act" onclick="location.href='/'"><span class="t" data-fr="Accueil public" data-en="Public home">Accueil public</span></button>
+    <button class="act danger" onclick="deconnexion()"><span class="t" data-fr="Déconnexion" data-en="Sign out">Déconnexion</span></button>
+    <p style="margin-top:14px"><a href="https://wa.me/243977555768">Inspire by YuuStore</a></p>
+  </div>
+</aside>
+<main id="main"></main>
+
+<div class="mod-back" id="modBack"><div class="mod">
+  <button class="x" onclick="fermeMod()">✕</button>
+  <div id="modContent"></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// shim : expose les éléments par id en variable globale avec underscore (l-email → l_email)
+document.querySelectorAll("[id]").forEach(function(e){ var v = e.id.replace(/-/g, "_"); if(!(v in window)) window[v] = e; });
+
+const API = location.origin + "/api";
+let TOKEN = localStorage.getItem("oc_token") || "";
+let MOI = null, EGLISE = null, MODULES = {}, ACTIONS = [], lang = localStorage.getItem("oc_lang") || "fr";
+
+function t(fr, en){ return lang === "fr" ? fr : (en || fr); }
+function toggleLang(){ lang = lang==="fr"?"en":"fr"; localStorage.setItem("oc_lang",lang); appliqueLang(); }
+function appliqueLang(){ document.querySelectorAll(".t").forEach(e=>{ e.textContent = lang==="fr" ? e.dataset.fr : (e.dataset.en||e.dataset.fr); }); if(MOI) construireNav(); afficherVue(); }
+function toast(msg, bad){ const e=document.getElementById("toast"); e.textContent=msg; e.className="toast show"+(bad?" bad":""); e.style.display="block"; setTimeout(()=>e.style.display="none", 3200); }
+async function api(chemin, donnees){
+  const r = await fetch(API+chemin,{method:"POST",headers:{"Content-Type":"application/json","X-Auth-Token":TOKEN},body:JSON.stringify(donnees||{})});
+  if(r.status===401){ localStorage.removeItem("oc_token"); location.href="/"; }
+  return r.json();
+}
+function fmtDate(iso){ if(!iso) return "—"; const d=new Date(iso); return d.toLocaleDateString(lang==="fr"?"fr-FR":"en-GB")+" "+d.toLocaleTimeString(lang==="fr"?"fr-FR":"en-GB",{hour:"2-digit",minute:"2-digit"}); }
+
+// ─── Vue active ───
+let vue = "bord";
+const VUES = [];
+function construireNav(){
+  const items = [];
+  if(MOI.is_super_admin) items.push(["eglises","✝","Églises","Churches"]);
+  items.push(["bord","◈","Tableau de bord","Dashboard"]);
+  if(perm("utilisateurs","consulter")) items.push(["utilisateurs","👥","Utilisateurs","Users"]);
+  if(perm("utilisateurs","consulter")) items.push(["roles","⚖","Rôles & permissions","Roles & permissions"]);
+  if(MOI.is_admin_principal) items.push(["invitations","✉","Invitations","Invitations"]);
+  if(perm("parametres","consulter")) items.push(["audit","☰","Journal d'audit","Audit log"]);
+  if(perm("parametres","consulter")) items.push(["parametres","⚙","Paramètres","Settings"]);
+  const nav = document.getElementById("nav");
+  nav.innerHTML = items.map(([id,ic,fr,en])=>`<div class="nv${vue===id?" on":""}" onclick="voir('${id}')"><span>${ic}</span><span>${t(fr,en)}</span></div>`).join("");
+}
+function perm(m,a){ return MOI && MOI.permissions && (MOI.permissions[m]||[]).includes(a); }
+function voir(v){ vue=v; document.body.classList.remove("menu"); construireNav(); afficherVue(); }
+
+// ─── Tableau de bord ───
+async function vueBord(){
+  const d = await api("/tableau-bord/");
+  if(!d.success) return main.innerHTML = errBox(d.error);
+  const x = d.data;
+  let html = kicker() + `<h1>${t("Tableau de bord","Dashboard")}</h1>`;
+  if(x.super){
+    html += `<div class="cards">
+      <div class="stat"><div class="n">${x.eglises_total}</div><div class="l">${t("Églises inscrites","Registered churches")}</div></div>
+      <div class="stat"><div class="n">${x.en_attente}</div><div class="l">${t("À compléter","To complete")}</div></div></div>
+      <p class="muted">${t("Supervision de la plateforme.","Platform supervision.")}</p>`;
+  } else {
+    html += `<div class="cards">
+      <div class="stat"><div class="n">${x.utilisateurs}</div><div class="l">${t("Utilisateurs actifs","Active users")}</div></div>
+      <div class="stat"><div class="n">${x.invitations_en_attente}</div><div class="l">${t("Invitations en attente","Pending invitations")}</div></div>
+      <div class="stat"><div class="n">${x.roles}</div><div class="l">${t("Rôles","Roles")}</div></div>
+      <div class="stat"><div class="n" style="font-size:20px;padding-top:8px">${fmtDate(x.essai_expire_le)}</div><div class="l">${t("Fin de l'essai","Trial ends")}</div></div>
+    </div>
+    <div class="panel"><div class="kicker">${t("Activité récente","Recent activity")}</div>
+    ${x.audit_recent.map(a=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(139,148,168,.12);font-size:13px"><span>${a.module} · ${a.action}</span><span class="muted" style="margin:0">${fmtDate(a.created_at)}</span></div>`).join("") || t("Aucune activité.","No activity.")}
+    </div>
+    <p class="muted">${t("Modules (membres, finances, événements…) : Phase 2 du développement.","Modules (members, finances, events…): development Phase 2.")}</p>`;
+  }
+  main.innerHTML = html;
+}
+function kicker(){ return `<div class="kicker">${MOI.is_super_admin ? t("Super-administration","Super administration") : EGLISE ? EGLISE.nom : ""}</div>`; }
+function errBox(m){ return `<div class="panel" style="color:#f2a49d">${m}</div>`; }
+
+// ─── Utilisateurs ───
+async function vueUtilisateurs(){
+  const d = await api("/utilisateurs/");
+  if(!d.success) return main.innerHTML = errBox(d.error);
+  const rows = d.data.utilisateurs.map(u=>`
+    <tr><td><b>${u.nom_complet}</b><br><span style="color:var(--muted);font-size:11px">${u.email}</span></td>
+    <td>${u.is_admin_principal ? `<span class="pill">${t("Admin principal","Main admin")}</span>` : u.roles.map(r=>`<span class="pill">${r.nom}</span>`).join(" ") || "—"}</td>
+    <td><span class="pill ${u.statut==="actif"?"okk":"bad"}">${u.statut}</span></td>
+    <td>${fmtDate(u.dernier_login)}</td>
+    <td>
+      ${MOI.is_admin_principal?`<button class="act" onclick="modUtilisateur(${u.id})">✎</button>`:""}
+      ${perm("utilisateurs","modifier")&&!u.is_admin_principal?`<button class="act" onclick="basculerStatut(${u.id},'${u.statut==="actif"?"suspendu":"actif"}')">${u.statut==="actif"?t("Suspendre","Suspend"):t("Réactiver","Reactivate")}</button>`:""}
+      ${perm("utilisateurs","supprimer")&&!u.is_admin_principal?`<button class="act danger" onclick="revoquer(${u.id})">${t("Révoquer","Revoke")}</button>`:""}
+    </td></tr>`).join("");
+  main.innerHTML = kicker()+`<h1>${t("Utilisateurs","Users")}</h1>
+    ${MOI.is_admin_principal?`<button class="btn" style="margin-top:18px" onclick="modCreerUtilisateur()">+ ${t("Créer un compte","Create account")}</button>`:""}
+    <table><tr><th>${t("Utilisateur","User")}</th><th>${t("Rôles","Roles")}</th><th>${t("Statut","Status")}</th><th>${t("Dernière connexion","Last login")}</th><th></th></tr>${rows}</table>`;
+}
+async function basculerStatut(id, statut){ const d=await api("/utilisateur/modifier/",{id,statut}); if(d.success){toast("✓ "+t("Statut modifié","Status updated"));vueUtilisateurs();}else toast(d.error,true); }
+async function revoquer(id){ if(!confirm(t("Révoquer définitivement ce compte ?","Permanently revoke this account?")))return; const d=await api("/utilisateur/supprimer/",{id}); if(d.success){toast("✓ "+t("Compte révoqué","Account revoked"));vueUtilisateurs();}else toast(d.error,true); }
+function modUtilisateur(id){ const u=MOI_CACHE.find(x=>x.id===id);
+  ouvreMod(`<h3>${u.nom_complet}</h3>
+  <label>${t("Nom complet","Full name")}</label><input id="m-nom" value="${u.nom_complet}">
+  <label>${t("Téléphone","Phone")}</label><input id="m-tel" value="${u.telephone}">
+  <label>${t("Nouveau mot de passe (laisser vide pour conserver)","New password (leave empty to keep)")}</label><input id="m-mdp" type="password">
+  ${!u.is_admin_principal?roleSelectHtml(u.roles.map(r=>r.id)):""}
+  <button class="btn" style="margin-top:20px" onclick="enregistrerUtilisateur(${id})">${t("Enregistrer","Save")}</button>`);
+}
+let MOI_CACHE=[];
+function roleSelectHtml(selected){ return `<label>${t("Rôle","Role")}</label><select id="m-role"><option value="">—</option>${ROLES_CACHE.map(r=>`<option value="${r.id}" ${selected.includes(r.id)?"selected":""}>${r.nom}</option>`).join("")}</select>`; }
+async function enregistrerUtilisateur(id){
+  const corps={id,nom_complet:m_nom.value,telephone:m_tel.value};
+  if(m_mdp.value) corps.mot_de_passe=m_mdp.value;
+  const roleId= document.getElementById("m-role") && document.getElementById("m-role").value;
+  const d=await api("/utilisateur/modifier/",corps);
+  if(!d.success) return toast(d.error,true);
+  if(roleId){ const r=await api("/role/attribuer/",{utilisateur_id:id, role_id:+roleId}); if(!r.success) return toast(r.error,true); }
+  fermeMod(); toast("✓"); vueUtilisateurs();
+}
+function modCreerUtilisateur(){
+  ouvreMod(`<h3>${t("Créer un compte","Create account")}</h3>
+  <label>${t("Nom complet *","Full name *")}</label><input id="c-nom">
+  <label>E-mail *</label><input id="c-email" type="email">
+  <label>${t("Téléphone","Phone")}</label><input id="c-tel">
+  <label>${t("Mot de passe * (8 min.)","Password * (min 8)")}</label><input id="c-mdp" type="password">
+  ${roleSelectHtml([])}
+  <button class="btn" style="margin-top:20px" onclick="creerUtilisateur()">${t("Créer","Create")}</button>`);
+}
+async function creerUtilisateur(){
+  const corps={nom_complet:c_nom.value,email:c_email.value,telephone:c_tel.value,mot_de_passe:c_mdp.value};
+  const roleId=document.getElementById("m-role").value; if(roleId) corps.role_id=+roleId;
+  const d=await api("/utilisateur/creer/",corps);
+  if(!d.success) return toast(d.error,true);
+  fermeMod(); toast("✓ "+t("Compte créé","Account created")); vueUtilisateurs();
+}
+
+// ─── Rôles ───
+let ROLES_CACHE=[];
+async function vueRoles(){
+  const d=await api("/roles/");
+  if(!d.success) return main.innerHTML=errBox(d.error);
+  ROLES_CACHE=d.data.roles; MODULES=d.data.modules; ACTIONS=d.data.actions;
+  const rows=ROLES_CACHE.map(r=>`
+   <tr><td><b>${r.nom}</b>${r.systeme?` <span class="pill">${t("système","system")}</span>`:""}<br><span style="color:var(--muted);font-size:11px">${r.description||""}</span></td>
+   <td style="font-size:11.5px">${Object.entries(r.permissions).map(([m,a])=>`<span class="pill">${MODULES[m]||m} · ${a.length}</span>`).join(" ")||"—"}</td>
+   <td>${perm("utilisateurs","supprimer")&&!r.systeme?`<button class="act danger" onclick="supprimerRole(${r.id})">🗑</button>`:""}</td></tr>`).join("");
+  main.innerHTML=kicker()+`<h1>${t("Rôles & permissions","Roles & permissions")}</h1>
+   ${perm("utilisateurs","creer")?`<button class="btn" style="margin-top:18px" onclick="modCreerRole()">+ ${t("Nouveau rôle","New role")}</button>`:""}
+   <table><tr><th>${t("Rôle","Role")}</th><th>${t("Permissions","Permissions")}</th><th></th></tr>${rows}</table>
+   <p class="muted">${t("Les permissions sont vérifiées côté serveur à chaque opération.","Permissions are verified server-side on every operation.")}</p>`;
+}
+async function supprimerRole(id){ if(!confirm(t("Supprimer ce rôle ?","Delete this role?")))return; const d=await api("/role/supprimer/",{id}); if(d.success){toast("✓");vueRoles();}else toast(d.error,true); }
+function modCreerRole(){
+  const grid=Object.entries(MODULES).map(([m,nom])=>`<div class="pm"><span>${nom}</span><div class="acts">${ACTIONS.map(a=>`<button class="ck" data-m="${m}" data-a="${a}" onclick="this.classList.toggle('on')">${a}</button>`).join("")}</div></div>`).join("");
+  ouvreMod(`<h3>${t("Nouveau rôle","New role")}</h3>
+  <label>${t("Nom *","Name *")}</label><input id="r-nom">
+  <label>${t("Description","Description")}</label><input id="r-desc">
+  <div class="perm-grid">${grid}</div>
+  <button class="btn" style="margin-top:20px" onclick="creerRole()">${t("Créer le rôle","Create role")}</button>`);
+}
+async function creerRole(){
+  const perms={};
+  document.querySelectorAll(".ck.on").forEach(b=>{ (perms[b.dataset.m]=perms[b.dataset.m]||[]).push(b.dataset.a); });
+  const d=await api("/role/creer/",{nom:r_nom.value,description:r_desc.value,permissions:perms});
+  if(!d.success) return toast(d.error,true);
+  fermeMod(); toast("✓"); vueRoles();
+}
+
+// ─── Invitations ───
+async function vueInvitations(){
+  const d=await api("/invitations/");
+  if(!d.success) return main.innerHTML=errBox(d.error);
+  const rows=d.data.invitations.map(i=>`
+   <tr><td>${i.nom_complet||"—"}<br><span style="color:var(--muted);font-size:11px">${i.email}</span></td>
+   <td>${i.role?`<span class="pill">${i.role}</span>`:"—"}</td>
+   <td>${i.utilise_le?`<span class="pill okk">${t("acceptée","accepted")}</span>`:(i.expiree?`<span class="pill bad">${t("expirée","expired")}</span>`:`<span class="pill">${t("en attente","pending")}</span>`)}</td>
+   <td>${i.utilise_le?"":`<button class="act" onclick="copierLien('${i.id}')">🔗 ${t("Copier le lien","Copy link")}</button>`}</td></tr>`).join("");
+  main.innerHTML=kicker()+`<h1>${t("Invitations","Invitations")}</h1>
+   <button class="btn" style="margin-top:18px" onclick="modInviter()">+ ${t("Inviter","Invite")}</button>
+   <table><tr><th>${t("Personne","Person")}</th><th>${t("Rôle","Role")}</th><th>${t("Statut","Status")}</th><th></th></tr>${rows}</table>
+   <p class="muted">${t("Chaque invitation est à usage unique et expire après 7 jours.","Each invitation is single-use and expires after 7 days.")}</p>`;
+  INV_CACHE=d.data.invitations;
+}
+let INV_CACHE=[];
+function copierLien(id){ const i=INV_CACHE.find(x=>x.id===id); const lien=location.origin+"/?invitation="; navigator.clipboard&&navigator.clipboard.writeText(lien); toast(lien+"\n(token: "+i.email+")"); }
+function modInviter(){
+  ouvreMod(`<h3>${t("Inviter un utilisateur","Invite a user")}</h3>
+  <label>E-mail *</label><input id="i-email" type="email">
+  <label>${t("Nom complet","Full name")}</label><input id="i-nom">
+  <label>${t("Rôle","Role")}</label><select id="i-role"><option value="">—</option>${ROLES_CACHE.map(r=>`<option value="${r.id}">${r.nom}</option>`).join("")}</select>
+  <button class="btn" style="margin-top:20px" onclick="inviter()">${t("Créer l'invitation","Create invitation")}</button>`);
+}
+async function inviter(){ const d=await api("/invitation/creer/",{email:i_email.value,nom_complet:i_nom.value,role_id:i_role.value||null});
+  if(!d.success) return toast(d.error,true);
+  fermeMod(); toast("✓ "+t("Invitation créée","Invitation created")); vueInvitations(); }
+
+// ─── Audit ───
+async function vueAudit(){
+  const d=await api("/audit/");
+  if(!d.success) return main.innerHTML=errBox(d.error);
+  const rows=d.data.audits.map(a=>`<tr><td>${a.module}</td><td>${a.action}</td><td style="max-width:320px">${a.details}</td><td>${a.utilisateur}</td><td>${fmtDate(a.created_at)}</td></tr>`).join("");
+  main.innerHTML=kicker()+`<h1>${t("Journal d'audit","Audit log")}</h1>
+  <table><tr><th>${t("Module","Module")}</th><th>${t("Action","Action")}</th><th>${t("Détails","Details")}</th><th>${t("Auteur","Author")}</th><th>${t("Date","Date")}</th></tr>${rows}</table>
+  <p class="muted">${t("Les entrées sont immuables et conservées côté serveur.","Entries are immutable and kept server-side.")}</p>`;
+}
+
+// ─── Paramètres ───
+async function vueParametres(){
+  const d=await api("/eglise/parametres/");
+  if(!d.success) return main.innerHTML=errBox(d.error);
+  const e=d.data.eglise;
+  main.innerHTML=kicker()+`<h1>${t("Paramètres de l'Église","Church settings")}</h1>
+  <div class="panel">
+    <label>${t("Nom officiel","Official name")}</label><input id="p-nom" value="${e.nom}">
+    <div class="row"><div><label>${t("Pays","Country")}</label><input id="p-pays" value="${e.pays}"></div>
+    <div><label>${t("Ville","City")}</label><input id="p-ville" value="${e.ville}"></div></div>
+    <label>${t("Adresse","Address")}</label><input id="p-adresse" value="${e.adresse}">
+    <div class="row"><div><label>${t("Dénomination","Denomination")}</label><input id="p-denom" value="${e.denomination}"></div>
+    <div><label>${t("Année de fondation","Founding year")}</label><input id="p-annee" type="number" value="${e.annee_fondation||""}"></div></div>
+    <div class="row"><div><label>E-mail</label><input id="p-email" value="${e.email}"></div>
+    <div><label>${t("Téléphone","Phone")}</label><input id="p-tel" value="${e.telephone}"></div></div>
+    <label>Logo (URL)</label><input id="p-logo" value="${e.logo_url}">
+    <div class="row"><div><label>${t("Couleur principale","Primary color")}</label><input id="p-c1" type="color" value="${e.couleur_primaire}"></div>
+    <div><label>${t("Couleur d'accent","Accent color")}</label><input id="p-c2" type="color" value="${e.couleur_accent}"></div>
+    <div><label>${t("Langue par défaut","Default language")}</label><select id="p-lang"><option value="fr" ${e.langue==="fr"?"selected":""}>Français</option><option value="en" ${e.langue==="en"?"selected":""}>English</option></select></div></div>
+    <button class="btn" style="margin-top:22px" onclick="enregistrerParametres()">${t("Enregistrer","Save")}</button>
+  </div>
+  <div class="panel"><div class="kicker">${t("Mes sessions","My sessions")}</div><div id="sessions"></div>
+  <button class="btn ghost" style="margin-top:16px" onclick="api('/auth/sessions-revoquer/',{id:'autres'}).then(()=>{toast('✓');chargerSessions()})">${t("Révoquer les autres sessions","Revoke other sessions")}</button></div>`;
+  chargerSessions();
+}
+async function chargerSessions(){ const d=await api("/auth/moi/"); if(d.success){
+  document.getElementById("sessions").innerHTML=d.data.sessions.map(s=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(139,148,168,.12);font-size:12.5px"><span>${s.actuelle?"<b>▸</b> ":""}${s.appareil.slice(0,44)}</span><span class="muted" style="margin:0">${fmtDate(s.created_at)}</span></div>`).join("");
+}}
+async function enregistrerParametres(){
+  const d=await api("/eglise/parametres/",{nom:p_nom.value,pays:p_pays.value,ville:p_ville.value,adresse:p_adresse.value,
+    denomination:p_denom.value,annee_fondation:p_annee.value,email:p_email.value,telephone:p_tel.value,
+    logo_url:p_logo.value,couleur_primaire:p_c1.value,couleur_accent:p_c2.value,langue:p_lang.value});
+  if(d.success){toast("✓ "+t("Paramètres enregistrés","Settings saved")); document.getElementById("nom-eglise").textContent=d.data.eglise.nom;}
+  else toast(d.error,true);
+}
+
+// ─── Super admin : Églises ───
+async function vueEglises(){
+  const d=await api("/super/eglises/");
+  if(!d.success) return main.innerHTML=errBox(d.error);
+  const rows=d.data.eglises.map(e=>`
+   <tr><td><b>${e.nom}</b><br><span style="color:var(--muted);font-size:11px">${e.pays} · ${e.ville} · ${e.utilisateurs} ${t("utilisateurs","users")}</span></td>
+   <td><span class="pill ${e.statut==="approuve"?"okk":(e.statut==="a_completer"?"":"bad")}">${e.statut}</span></td>
+   <td>${fmtDate(e.essai_expire_le)}</td>
+   <td>
+     <button class="act" onclick="actionEglise(${e.id},'approuver')">${t("Approuver","Approve")}</button>
+     <button class="act" onclick="actionEglise(${e.id},'prolonger_essai')">+7j</button>
+     <button class="act danger" onclick="actionEglise(${e.id},'suspendre')">${t("Suspendre","Suspend")}</button>
+   </td></tr>`).join("");
+  main.innerHTML=`<div class="kicker">${t("Super-administration de la plateforme","Platform super-administration")}</div><h1>${t("Églises","Churches")}</h1>
+   <table><tr><th>${t("Église","Church")}</th><th>${t("Statut","Status")}</th><th>${t("Essai","Trial")}</th><th>${t("Actions","Actions")}</th></tr>${rows}</table>`;
+}
+async function actionEglise(id, action){ const d=await api("/super/eglises/",{eglise_id:id, action}); if(d.success){toast("✓");vueEglises();}else toast(d.error,true); }
+
+// ─── Modales & divers ───
+function ouvreMod(html){ document.getElementById("modContent").innerHTML=html; document.getElementById("modBack").style.display="flex"; }
+function fermeMod(){ document.getElementById("modBack").style.display="none"; }
+async function deconnexion(){ await api("/auth/logout/",{}); localStorage.removeItem("oc_token"); location.href="/"; }
+
+// ─── Chargement ───
+const main = document.getElementById("main");
+async function afficherVue(){
+  if(vue==="bord") return vueBord();
+  if(vue==="utilisateurs"){ const d=await api("/utilisateurs/"); if(d.success) MOI_CACHE=d.data.utilisateurs; return vueUtilisateurs(); }
+  if(vue==="roles") return vueRoles();
+  if(vue==="invitations"){ if(!ROLES_CACHE.length){ const r=await api("/roles/"); if(r.success){ROLES_CACHE=r.data.roles;MODULES=r.data.modules;ACTIONS=r.data.actions;} } return vueInvitations(); }
+  if(vue==="audit") return vueAudit();
+  if(vue==="parametres") return vueParametres();
+  if(vue==="eglises") return vueEglises();
+}
+(async function init(){
+  if(!TOKEN){ location.href="/"; return; }
+  const d=await api("/auth/moi/");
+  if(!d.success){ localStorage.removeItem("oc_token"); location.href="/"; return; }
+  MOI=d.data.utilisateur; EGLISE=d.data.eglise;
+  MODULES=d.data.modules; ACTIONS=d.data.actions;
+  document.getElementById("nom-eglise").textContent = MOI.is_super_admin ? t("Administrateur plateforme","Platform administrator") : (EGLISE ? EGLISE.nom : "");
+  document.getElementById("user-email").textContent = MOI.email;
+  construireNav(); appliqueLang();
+})();
+</script>
+</body>
+</html>
