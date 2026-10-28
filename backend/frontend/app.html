@@ -111,6 +111,10 @@ function construireNav(){
   const items = [];
   if(MOI.is_super_admin) items.push(["eglises","✝","Églises","Churches"]);
   items.push(["bord","◈","Tableau de bord","Dashboard"]);
+  if(perm("membres","consulter")) items.push(["membres","✦","Membres","Members"]);
+  if(perm("membres","consulter")) items.push(["effectifs","Σ","Effectifs","Headcount"]);
+  if(perm("groupes","consulter")) items.push(["groupes","⌘","Groupes","Groups"]);
+  if(perm("presences","consulter")) items.push(["presences","✓","Présences","Attendance"]);
   if(perm("utilisateurs","consulter")) items.push(["utilisateurs","👥","Utilisateurs","Users"]);
   if(perm("utilisateurs","consulter")) items.push(["roles","⚖","Rôles & permissions","Roles & permissions"]);
   if(MOI.is_admin_principal) items.push(["invitations","✉","Invitations","Invitations"]);
@@ -127,6 +131,8 @@ async function vueBord(){
   const d = await api("/tableau-bord/");
   if(!d.success) return main.innerHTML = errBox(d.error);
   const x = d.data;
+  let S = null;
+  if(!x.super){ const s = await api("/bord/stats/"); if(s.success) S = s.data; }
   let html = kicker() + `<h1>${t("Tableau de bord","Dashboard")}</h1>`;
   if(x.super){
     html += `<div class="cards">
@@ -135,6 +141,11 @@ async function vueBord(){
       <p class="muted">${t("Supervision de la plateforme.","Platform supervision.")}</p>`;
   } else {
     html += `<div class="cards">
+      ${S?`<div class="stat"><div class="n">${S.membres_total}</div><div class="l">${t("Membres enregistrés","Registered members")}</div></div>
+      <div class="stat"><div class="n">${S.membres_a_valider}</div><div class="l">${t("Dossiers à valider","Records to approve")}</div></div>
+      <div class="stat"><div class="n">${S.effectif_declare + S.membres_total}</div><div class="l">${t("Total général déclaré","Declared grand total")}</div></div>
+      <div class="stat"><div class="n">${S.groupes}</div><div class="l">${t("Groupes actifs","Active groups")}</div></div>
+      <div class="stat"><div class="n">${S.presences_identifiees}</div><div class="l">${t("Présences pointées","Check-ins")}</div></div>`:""}
       <div class="stat"><div class="n">${x.utilisateurs}</div><div class="l">${t("Utilisateurs actifs","Active users")}</div></div>
       <div class="stat"><div class="n">${x.invitations_en_attente}</div><div class="l">${t("Invitations en attente","Pending invitations")}</div></div>
       <div class="stat"><div class="n">${x.roles}</div><div class="l">${t("Rôles","Roles")}</div></div>
@@ -143,7 +154,7 @@ async function vueBord(){
     <div class="panel"><div class="kicker">${t("Activité récente","Recent activity")}</div>
     ${x.audit_recent.map(a=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(139,148,168,.12);font-size:13px"><span>${a.module} · ${a.action}</span><span class="muted" style="margin:0">${fmtDate(a.created_at)}</span></div>`).join("") || t("Aucune activité.","No activity.")}
     </div>
-    <p class="muted">${t("Modules (membres, finances, événements…) : Phase 2 du développement.","Modules (members, finances, events…): development Phase 2.")}</p>`;
+    <p class="muted">${t("Phase 2 livrée : membres, matricules, effectifs, groupes, présences. Phase 3 : calendrier et communication.","Phase 2 delivered: members, IDs, headcount, groups, attendance. Phase 3: calendar and communication.")}</p>`;
   }
   main.innerHTML = html;
 }
@@ -336,9 +347,319 @@ function fermeMod(){ document.getElementById("modBack").style.display="none"; }
 async function deconnexion(){ await api("/auth/logout/",{}); localStorage.removeItem("oc_token"); location.href="/"; }
 
 // ─── Chargement ───
+// ══════════════════ PHASE 2 — Membres, effectifs, groupes, présences ══════════════════
+function ouvrirModale(titre, html){ ouvreMod(`<h3>${titre}</h3>` + html); }
+function fermerModale(){ fermeMod(); }
+let MEMBRES_CACHE = [], MEMBRES_TOTAL = 0, MEMBRES_PAGE = 1, MEMBRES_FILTRE = {q:"", statut:"", etat_validation:""};
+let GROUPES_CACHE = [], EVENEMENTS_CACHE = [], EVENEMENT_COURANT = null, PRESENCES_CACHE = null;
+
+function statutPill(s){
+  const bons = ["actif","valide"], mauvais = ["rejete","suspendu","decede","retourne"];
+  const classe = bons.includes(s) ? "okk" : (mauvais.includes(s) ? "bad" : "");
+  return `<span class="pill ${classe}">${s}</span>`;
+}
+
+// ─── Membres ───
+async function vueMembres(page){
+  MEMBRES_PAGE = page || MEMBRES_PAGE || 1;
+  const p = new URLSearchParams({q:MEMBRES_FILTRE.q, statut:MEMBRES_FILTRE.statut,
+    etat_validation:MEMBRES_FILTRE.etat_validation, page:MEMBRES_PAGE, limit:25});
+  const d = await api("/membres/?" + p.toString());
+  if(!d.success) return main.innerHTML = errBox(d.error);
+  MEMBRES_CACHE = d.data.membres; MEMBRES_TOTAL = d.data.total;
+  const lignes = MEMBRES_CACHE.map(m=>`<tr>
+    <td><span class="pill">${m.matricule || "—"}</span></td>
+    <td><b>${m.nom_complet}</b><br><span style="color:var(--muted);font-size:11px">${m.telephone||""} ${m.email||""}</span></td>
+    <td>${m.sexe||"—"}</td>
+    <td>${statutPill(m.statut)}</td>
+    <td>${statutPill(m.etat_validation)}</td>
+    <td>
+      ${m.etat_validation!=="valide"&&perm("membres","valider")?`<button class="act" onclick="validerMembre(${m.id})">${t("Valider","Approve")}</button>`:""}
+      ${m.etat_validation==="a_valider"&&perm("membres","valider")?`<button class="act" onclick="retournerMembre(${m.id})">${t("Retourner","Return")}</button>`:""}
+      ${m.etat_validation==="a_valider"&&perm("membres","valider")?`<button class="act danger" onclick="rejeterMembre(${m.id})">${t("Rejeter","Reject")}</button>`:""}
+      ${perm("membres","modifier")?`<button class="act" onclick="modMembre(${m.id})">✎</button>`:""}
+      ${perm("documents","consulter")?`<button class="act" onclick="window.open('/api/document/fiche/?id=${m.id}','_blank')">${t("Fiche","Sheet")}</button>`:""}
+      ${perm("documents","consulter")&&m.matricule?`<button class="act" onclick="window.open('/api/document/carte/?id=${m.id}','_blank')">${t("Carte","Card")}</button>`:""}
+    </td></tr>`).join("");
+  main.innerHTML = kicker() + `<h1>${t("Membres","Members")}</h1>
+    <p class="muted" style="margin-top:4px">${MEMBRES_TOTAL} ${t("dossier(s)","record(s)")}</p>
+    <div class="row" style="margin-top:16px">
+      <div><input id="f-q" placeholder="${t("Nom, matricule, téléphone…","Name, ID, phone…")}" value="${MEMBRES_FILTRE.q}" onkeydown="if(event.key==='Enter')filtrerMembres()"></div>
+      <div><select id="f-statut" onchange="filtrerMembres()">
+        <option value="">${t("Tous les statuts","All statuses")}</option>
+        ${["actif","nouveau","visiteur","integration","transfere","suspendu","decede"].map(s=>`<option value="${s}" ${MEMBRES_FILTRE.statut===s?"selected":""}>${s}</option>`).join("")}
+      </select></div>
+      <div><select id="f-etat" onchange="filtrerMembres()">
+        <option value="">${t("Toutes les validations","All validations")}</option>
+        ${["a_valider","valide","retourne","rejete"].map(s=>`<option value="${s}" ${MEMBRES_FILTRE.etat_validation===s?"selected":""}>${s}</option>`).join("")}
+      </select></div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      ${perm("membres","creer")?`<button class="btn" onclick="modMembre(0)">+ ${t("Nouveau dossier","New record")}</button>`:""}
+      ${perm("membres","consulter")?`<button class="btn ghost" onclick="voirDoublons()">${t("Doublons potentiels","Possible duplicates")}</button>`:""}
+      ${perm("membres","exporter")?`<button class="btn ghost" onclick="window.open('/api/membres/export/','_blank')">${t("Exporter CSV","Export CSV")}</button>`:""}
+    </div>
+    <table><thead><tr><th>${t("Matricule","Member ID")}</th><th>${t("Nom","Name")}</th><th>${t("Sexe","Sex")}</th><th>${t("Statut","Status")}</th><th>${t("Validation","Validation")}</th><th></th></tr></thead>
+    <tbody>${lignes || `<tr><td colspan="6" class="muted">${t("Aucun membre enregistré.","No member yet.")}</td></tr>`}</tbody></table>
+    <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
+      <button class="act" ${MEMBRES_PAGE<=1?"disabled":""} onclick="vueMembres(${MEMBRES_PAGE-1})">←</button>
+      <span class="muted" style="margin:0">${t("Page","Page")} ${MEMBRES_PAGE} / ${d.data.pages}</span>
+      <button class="act" ${MEMBRES_PAGE>=d.data.pages?"disabled":""} onclick="vueMembres(${MEMBRES_PAGE+1})">→</button>
+    </div>`;
+}
+function filtrerMembres(){
+  MEMBRES_FILTRE = {q:document.getElementById("f-q").value, statut:document.getElementById("f-statut").value,
+    etat_validation:document.getElementById("f-etat").value};
+  vueMembres(1);
+}
+async function modMembre(id){
+  const m = id ? MEMBRES_CACHE.find(x=>x.id===id) : null;
+  const det = id ? await api("/membre/?id="+id) : null;
+  const M = det && det.success ? det.data.membre : {};
+  ouvrirModale(`${id?t("Modifier le dossier","Edit record"):t("Nouveau dossier de membre","New member record")}`, `
+    <div class="row"><div><label>${t("Nom","Surname")} *</label><input id="m-nom" value="${M.nom||""}"></div>
+    <div><label>${t("Postnom","Middle name")}</label><input id="m-postnom" value="${M.postnom||""}"></div>
+    <div><label>${t("Prénom","First name")}</label><input id="m-prenom" value="${M.prenom||""}"></div></div>
+    <div class="row"><div><label>${t("Sexe","Sex")}</label><select id="m-sexe"><option value=""></option>
+      <option value="M" ${M.sexe==="M"?"selected":""}>Masculin</option><option value="F" ${M.sexe==="F"?"selected":""}>Féminin</option></select></div>
+    <div><label>${t("Date de naissance","Date of birth")}</label><input id="m-naissance" type="date" value="${M.date_naissance||""}"></div>
+    <div><label>${t("Lieu de naissance","Place of birth")}</label><input id="m-lieu" value="${M.lieu_naissance||""}"></div></div>
+    <div class="row"><div><label>${t("Téléphone","Phone")}</label><input id="m-tel" value="${M.telephone||""}"></div>
+    <div><label>${t("E-mail","Email")}</label><input id="m-mail" value="${M.email||""}"></div></div>
+    <div class="row"><div><label>${t("Profession","Occupation")}</label><input id="m-prof" value="${M.profession||""}"></div>
+    <div><label>${t("État civil","Marital status")}</label><input id="m-civil" value="${M.etat_civil||""}"></div>
+    <div><label>${t("Statut","Status")}</label><select id="m-statut">
+      ${["actif","nouveau","visiteur","integration","transfere","suspendu","decede"].map(s=>`<option value="${s}" ${M.statut===s?"selected":""}>${s}</option>`).join("")}
+    </select></div></div>
+    <div class="row"><div><label>${t("Adresse","Address")}</label><input id="m-adresse" value="${M.adresse||""}"></div>
+    <div><label>${t("Personne à contacter","Emergency contact")}</label><input id="m-urgence" value="${M.contact_urgence||""}"></div></div>
+    <div class="row"><div><label>${t("Date d'adhésion","Joined on")}</label><input id="m-adhesion" type="date" value="${M.date_adhesion||""}"></div>
+    <div><label>${t("Date d'ordination","Ordained on")}</label><input id="m-ordination" type="date" value="${M.date_ordination||""}"></div></div>
+    <label>${t("Observations","Notes")}</label><textarea id="m-obs" rows="2" style="width:100%;background:rgba(10,16,30,.7);border:1px solid var(--line);border-radius:9px;padding:11px;color:var(--ivory);font-family:inherit">${M.observation||""}</textarea>
+    <div style="margin-top:18px;display:flex;gap:10px"><button class="btn" onclick="enregistrerMembre(${id||0})">${t("Enregistrer","Save")}</button>
+    <button class="btn ghost" onclick="fermerModale()">${t("Annuler","Cancel")}</button></div>`);
+}
+async function enregistrerMembre(id){
+  const v = x => document.getElementById(x) ? document.getElementById(x).value : "";
+  const corps = {nom:v("m-nom"), postnom:v("m-postnom"), prenom:v("m-prenom"), sexe:v("m-sexe"),
+    date_naissance:v("m-naissance")||null, lieu_naissance:v("m-lieu"), telephone:v("m-tel"),
+    email:v("m-mail"), profession:v("m-prof"), etat_civil:v("m-civil"), statut:v("m-statut"),
+    adresse:v("m-adresse"), contact_urgence:v("m-urgence"),
+    date_adhesion:v("m-adhesion")||null, date_ordination:v("m-ordination")||null, observation:v("m-obs")};
+  if(!corps.nom.trim()) return toast(t("Le nom est obligatoire.","Name is required."), true);
+  const d = id ? await api("/membre/modifier/", Object.assign({id}, corps)) : await api("/membre/creer/", corps);
+  if(d.success){ fermerModale(); toast("✓ " + t("Dossier enregistré","Record saved")); vueMembres(); }
+  else toast(d.error, true);
+}
+async function validerMembre(id){
+  const d = await api("/membre/valider/", {id});
+  if(d.success){ toast("✓ " + t("Dossier validé, matricule ","Record approved, ID ") + d.data.matricule); vueMembres(); }
+  else toast(d.error, true);
+}
+async function retournerMembre(id){
+  const motif = prompt(t("Motif du retour pour correction :","Reason for returning it:"));
+  if(!motif) return;
+  const d = await api("/membre/retourner/", {id, motif});
+  if(d.success){ toast("✓ " + t("Dossier retourné","Record returned")); vueMembres(); } else toast(d.error, true);
+}
+async function rejeterMembre(id){
+  const motif = prompt(t("Motif du rejet (obligatoire) :","Reason for rejection (required):"));
+  if(!motif) return;
+  const d = await api("/membre/rejeter/", {id, motif});
+  if(d.success){ toast("✓ " + t("Dossier rejeté","Record rejected")); vueMembres(); } else toast(d.error, true);
+}
+async function voirDoublons(){
+  const d = await api("/membres/doublons/");
+  if(!d.success) return toast(d.error, true);
+  const blocs = d.data.doublons.map(x=>`<div style="padding:10px 0;border-bottom:1px solid rgba(139,148,168,.12)">
+    <div class="pill">${x.raison}</div>
+    <div style="margin-top:6px;font-size:13px">${x.membres.map(m=>`${m.nom_complet} <span class="muted" style="margin:0">(${m.matricule||"—"})</span>`).join(" · ")}</div></div>`).join("");
+  ouvrirModale(t("Doublons potentiels","Possible duplicates"), `
+    <p class="muted" style="margin-top:0">${d.data.note}</p>
+    ${blocs || `<p class="muted">${t("Aucun doublon détecté.","No duplicate found.")}</p>`}`);
+}
+
+// ─── Effectifs ───
+async function vueEffectifs(){
+  const [d, pm] = await Promise.all([api("/effectifs/"), api("/matricule/parametres/")]);
+  if(!d.success) return main.innerHTML = errBox(d.error);
+  const x = d.data, p = pm.success ? pm.data : null;
+  const hist = x.effectifs.map(e=>`<tr><td>${e.categorie}</td><td><b>${e.valeur}</b></td><td>${e.periode}</td>
+    <td>${e.auteur}</td><td>${e.observation||"—"}</td></tr>`).join("");
+  main.innerHTML = kicker() + `<h1>${t("Effectifs","Headcount")}</h1>
+    <div class="cards">
+      <div class="stat"><div class="n">${x.membres_enregistres}</div><div class="l">${t("Dossiers individuels","Individual records")}</div></div>
+      <div class="stat"><div class="n">${x.effectif_declare}</div><div class="l">${t("Effectif déclaré","Declared headcount")}</div></div>
+      <div class="stat" style="border-color:rgba(201,162,39,.5)"><div class="n">${x.total_general}</div><div class="l">${t("Total général","Grand total")}</div></div>
+    </div>
+    <div class="panel" style="max-width:none;border-left:3px solid var(--gold)">
+      <div class="kicker">${t("Règle de calcul","Calculation rule")}</div>
+      <p style="font-size:13.5px">${x.avertissement}</p>
+    </div>
+    ${p ? `<div class="panel"><div class="kicker">${t("Format du matricule","Member ID format")}</div>
+      <p class="muted" style="margin-top:6px">${t("Prochain matricule","Next ID")} : <b style="color:var(--gold2)">${p.exemple}</b> · ${p.compteur} ${t("attribués","issued")}</p>
+      <div class="row"><div><label>${t("Préfixe","Prefix")}</label><input id="mt-prefixe" value="${p.prefixe}"></div>
+      <div><label>${t("Chiffres","Digits")}</label><input id="mt-chiffres" type="number" min="2" max="8" value="${p.chiffres}"></div>
+      <div><label>${t("Année","Year")}</label><select id="mt-annee"><option value="1" ${p.inclure_annee?"selected":""}>Oui</option><option value="0" ${!p.inclure_annee?"selected":""}>Non</option></select></div></div>
+      <button class="btn" style="margin-top:14px" onclick="enregistrerMatricule()">${t("Enregistrer le format","Save format")}</button>
+    </div>` : ""}
+    <h1 style="font-size:20px;margin-top:30px">${t("Déclarations d'effectif","Headcount declarations")}</h1>
+    <div class="row" style="margin-top:12px">
+      <div><label>${t("Catégorie","Category")}</label><select id="e-cat">${x.categories.map(c=>`<option value="${c.code}">${c.label}</option>`).join("")}</select></div>
+      <div><label>${t("Nombre","Number")}</label><input id="e-val" type="number" min="0" value=""></div>
+      <div><label>${t("Période","Period")}</label><input id="e-per" placeholder="10/2026"></div>
+      <div><label>${t("Observation","Note")}</label><input id="e-obs"></div>
+    </div>
+    <button class="btn" style="margin-top:14px" onclick="ajouterEffectif()">+ ${t("Enregistrer une déclaration","Save a declaration")}</button>
+    <table><thead><tr><th>${t("Catégorie","Category")}</th><th>${t("Valeur","Value")}</th><th>${t("Période","Period")}</th><th>${t("Auteur","By")}</th><th>${t("Observation","Note")}</th></tr></thead><tbody>${hist||`<tr><td colspan="5" class="muted">${t("Aucune déclaration.","No declaration yet.")}</td></tr>`}</tbody></table>`;
+}
+async function ajouterEffectif(){
+  const v = x=>document.getElementById(x).value;
+  const d = await api("/effectif/creer/", {categorie:v("e-cat"), valeur:v("e-val"), periode:v("e-per"), observation:v("e-obs")});
+  if(d.success){ toast("✓ " + t("Déclaration enregistrée","Declaration saved")); vueEffectifs(); } else toast(d.error, true);
+}
+async function enregistrerMatricule(){
+  const v = x=>document.getElementById(x).value;
+  const d = await api("/matricule/parametres/", {prefixe:v("mt-prefixe"), chiffres:v("mt-chiffres"), inclure_annee:v("mt-annee")==="1"});
+  if(d.success){ toast("✓ " + t("Format enregistré","Format saved")); vueEffectifs(); } else toast(d.error, true);
+}
+
+// ─── Groupes ───
+async function vueGroupes(){
+  const [d, dm] = await Promise.all([api("/groupes/"), api("/membres/?limit=100")]);
+  if(!d.success) return main.innerHTML = errBox(d.error);
+  GROUPES_CACHE = d.data.groupes;
+  MEMBRES_CACHE = dm.success ? dm.data.membres : [];
+  const lignes = GROUPES_CACHE.map(g=>`<tr>
+    <td><b>${g.nom}</b><br><span style="color:var(--muted);font-size:11px">${g.type}</span></td>
+    <td>${g.responsable||"—"}</td>
+    <td><span class="pill">${g.effectif}</span></td>
+    <td>${g.parent_nom||"—"}</td>
+    <td>${g.actif?`<span class="pill okk">${t("actif","active")}</span>`:`<span class="pill bad">${t("inactif","inactive")}</span>`}</td>
+    <td>${perm("groupes","modifier")?`<button class="act" onclick="window.MG=${g.id};voirMembresGroupe(${g.id})">${t("Membres","Members")}</button>`:""}
+    ${perm("groupes","supprimer")?`<button class="act danger" onclick="desactiverGroupe(${g.id})">✕</button>`:""}</td></tr>`).join("");
+  main.innerHTML = kicker() + `<h1>${t("Groupes & départements","Groups & departments")}</h1>
+    <div class="row" style="margin-top:16px">
+      <div><label>${t("Nom","Name")}</label><input id="g-nom"></div>
+      <div><label>${t("Type","Type")}</label><select id="g-type">${d.data.types.map(x=>`<option>${x}</option>`).join("")}</select></div>
+      <div><label>${t("Responsable","Leader")}</label><select id="g-resp"><option value="">—</option>${MEMBRES_CACHE.map(m=>`<option value="${m.id}">${m.nom_complet}</option>`).join("")}</select></div>
+    </div>
+    <button class="btn" style="margin-top:14px" onclick="creerGroupe()">+ ${t("Créer un groupe","Create a group")}</button>
+    <table><thead><tr><th>${t("Groupe","Group")}</th><th>${t("Responsable","Leader")}</th><th>${t("Effectif","Members")}</th><th>${t("Rattaché à","Parent")}</th><th>${t("État","State")}</th><th></th></tr></thead>
+    <tbody>${lignes||`<tr><td colspan="6" class="muted">${t("Aucun groupe.","No group yet.")}</td></tr>`}</tbody></table>
+    <div class="panel" style="max-width:none"><div class="kicker">${t("Affecter un membre","Assign a member")}</div>
+      <div class="row"><div><label>${t("Membre","Member")}</label><select id="a-membre">${MEMBRES_CACHE.map(m=>`<option value="${m.id}">${m.nom_complet} ${m.matricule?"· "+m.matricule:""}</option>`).join("")}</select></div>
+      <div><label>${t("Groupe","Group")}</label><select id="a-groupe">${GROUPES_CACHE.map(g=>`<option value="${g.id}">${g.nom}</option>`).join("")}</select></div>
+      <div><label>${t("Fonction","Role")}</label><input id="a-fonction" value="membre"></div></div>
+      <button class="btn" style="margin-top:14px" onclick="affecterMembre()">${t("Affecter","Assign")}</button>
+    </div>`;
+}
+async function creerGroupe(){
+  const d = await api("/groupe/creer/", {nom:document.getElementById("g-nom").value,
+    type:document.getElementById("g-type").value, responsable_id:document.getElementById("g-resp").value||null});
+  if(d.success){ toast("✓ " + t("Groupe créé","Group created")); vueGroupes(); } else toast(d.error, true);
+}
+async function desactiverGroupe(id){
+  if(!confirm(t("Désactiver ce groupe ?","Deactivate this group?"))) return;
+  const d = await api("/groupe/supprimer/", {id});
+  if(d.success){ toast("✓ " + t("Groupe désactivé","Group deactivated")); vueGroupes(); } else toast(d.error, true);
+}
+async function affecterMembre(){
+  const d = await api("/groupe/affecter/", {membre_id:document.getElementById("a-membre").value,
+    groupe_id:document.getElementById("a-groupe").value, fonction:document.getElementById("a-fonction").value});
+  if(d.success){ toast("✓ " + t("Membre affecté","Member assigned")); vueGroupes(); } else toast(d.error, true);
+}
+async function voirMembresGroupe(id){
+  const g = GROUPES_CACHE.find(x=>x.id===id);
+  const d = await api("/membres/?groupe="+id+"&limit=100");
+  const liste = d.success ? d.data.membres : [];
+  ouvrirModale(g.nom, `<p class="muted" style="margin-top:0">${liste.length} ${t("membre(s)","member(s)")}</p>
+    ${liste.map(m=>`<div style="padding:7px 0;border-bottom:1px solid rgba(139,148,168,.12);font-size:13px">${m.nom_complet} <span class="muted" style="margin:0">${m.matricule||""}</span></div>`).join("")||`<p class="muted">${t("Aucun membre.","No member.")}</p>`}`);
+}
+
+// ─── Présences ───
+async function vuePresences(evId){
+  const d = await api("/evenements/");
+  if(!d.success) return main.innerHTML = errBox(d.error);
+  EVENEMENTS_CACHE = d.data.evenements;
+  const courant = evId || EVENEMENT_COURANT || (EVENEMENTS_CACHE[0] && EVENEMENTS_CACHE[0].id);
+  EVENEMENT_COURANT = courant;
+  let bloc = "";
+  if(courant){
+    const p = await api("/presences/?evenement="+courant);
+    if(p.success){
+      PRESENCES_CACHE = p.data;
+      bloc = `<div class="cards">
+        <div class="stat"><div class="n">${p.data.total_identifies}</div><div class="l">${t("Présents identifiés","Identified present")}</div></div>
+        <div class="stat"><div class="n">${p.data.retards}</div><div class="l">${t("Retards","Late")}</div></div>
+        <div class="stat"><div class="n">${p.data.visiteurs}</div><div class="l">${t("Visiteurs","Visitors")}</div></div>
+        <div class="stat"><div class="n">${p.data.effectif_global}</div><div class="l">${t("Effectif global","Declared headcount")}</div></div>
+      </div>
+      <div class="panel" style="max-width:none"><div class="kicker">${t("Pointage","Check-in")}</div>
+        <div class="row"><div><label>${t("Membre","Member")}</label><select id="p-membre">${MEMBRES_CACHE.map(m=>`<option value="${m.id}">${m.nom_complet} ${m.matricule?"· "+m.matricule:""}</option>`).join("")}</select></div>
+        <div><label>${t("Statut","Status")}</label><select id="p-statut"><option value="present">${t("Présent","Present")}</option><option value="retard">${t("Retard","Late")}</option><option value="absent">${t("Absent","Absent")}</option></select></div>
+        <div><label>${t("Visiteur non enregistré","Unregistered visitor")}</label><input id="p-visiteur" placeholder="${t("Nom","Name")}"></div>
+        <div><label>${t("Effectif global","Declared headcount")}</label><input id="p-global" type="number" min="0"></div></div>
+        <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="pointerMembre()">${t("Pointer le membre","Check in member")}</button>
+          <button class="btn ghost" onclick="pointerVisiteur()">+ ${t("Visiteur","Visitor")}</button>
+          <button class="btn ghost" onclick="pointerGlobal()">+ ${t("Effectif global","Headcount")}</button>
+        </div>
+      </div>
+      <table><thead><tr><th>${t("Qui","Who")}</th><th>${t("Statut","Status")}</th><th>${t("Observation","Note")}</th><th></th></tr></thead>
+      <tbody>${p.data.presences.map(x=>`<tr><td>${x.membre||x.visiteur||"—"}<br><span style="color:var(--muted);font-size:11px">${x.matricule||""}</span></td>
+        <td>${x.effectif_global!==null?`<span class="pill">${x.effectif_global} ${t("non identifiés","unidentified")}</span>`:statutPill(x.statut)}</td>
+        <td>${x.observation||"—"}</td>
+        <td>${perm("presences","supprimer")?`<button class="act danger" onclick="supprimerPresence(${x.id})">✕</button>`:""}</td></tr>`).join("")||`<tr><td colspan="4" class="muted">${t("Aucun pointage.","No check-in yet.")}</td></tr>`}</tbody></table>`;
+    }
+  }
+  main.innerHTML = kicker() + `<h1>${t("Présences","Attendance")}</h1>
+    <div class="row" style="margin-top:16px">
+      <div><label>${t("Titre de l'activité","Activity title")}</label><input id="ev-titre" placeholder="${t("Culte du dimanche","Sunday service")}"></div>
+      <div><label>${t("Type","Type")}</label><select id="ev-type">${d.data.types.map(x=>`<option value="${x.code}">${x.label}</option>`).join("")}</select></div>
+      <div><label>${t("Date","Date")}</label><input id="ev-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div><label>${t("Heure","Time")}</label><input id="ev-heure" placeholder="09:00"></div>
+    </div>
+    <button class="btn" style="margin-top:14px" onclick="creerEvenement()">+ ${t("Créer l'activité","Create activity")}</button>
+    <div style="margin-top:22px;display:flex;gap:8px;flex-wrap:wrap">
+      ${EVENEMENTS_CACHE.map(x=>`<button class="act ${x.id===courant?"":""}" style="${x.id===courant?"border-color:var(--gold);color:var(--gold2)":""}" onclick="vuePresences(${x.id})">${x.titre} · ${x.date}</button>`).join("")||`<span class="muted">${t("Aucune activité.","No activity yet.")}</span>`}
+    </div>
+    ${bloc}`;
+}
+async function creerEvenement(){
+  const v = x=>document.getElementById(x).value;
+  const d = await api("/evenement/creer/", {titre:v("ev-titre"), type:v("ev-type"), date:v("ev-date"), heure:v("ev-heure")});
+  if(d.success){ toast("✓ " + t("Activité créée","Activity created")); vuePresences(); } else toast(d.error, true);
+}
+async function pointerMembre(){
+  const d = await api("/presence/pointer/", {evenement:EVENEMENT_COURANT,
+    membre_id:document.getElementById("p-membre").value, statut:document.getElementById("p-statut").value});
+  if(d.success){ toast("✓ " + t("Pointage enregistré","Check-in saved")); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
+}
+async function pointerVisiteur(){
+  const nom = document.getElementById("p-visiteur").value;
+  if(!nom) return toast(t("Indiquez le nom du visiteur.","Enter the visitor name."), true);
+  const d = await api("/presence/pointer/", {evenement:EVENEMENT_COURANT, visiteur_nom:nom});
+  if(d.success){ toast("✓ " + t("Visiteur ajouté","Visitor added")); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
+}
+async function pointerGlobal(){
+  const n = document.getElementById("p-global").value;
+  if(n==="") return toast(t("Indiquez l'effectif.","Enter the headcount."), true);
+  const d = await api("/presence/pointer/", {evenement:EVENEMENT_COURANT, effectif_global:n});
+  if(d.success){ toast("✓ " + t("Effectif pointé","Headcount recorded")); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
+}
+async function supprimerPresence(id){
+  const d = await api("/presence/supprimer/", {id});
+  if(d.success){ toast("✓"); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
+}
+
 const main = document.getElementById("main");
 async function afficherVue(){
   if(vue==="bord") return vueBord();
+  if(vue==="membres") return vueMembres();
+  if(vue==="effectifs") return vueEffectifs();
+  if(vue==="groupes") return vueGroupes();
+  if(vue==="presences"){ if(!MEMBRES_CACHE.length){ const dm=await api("/membres/?limit=100"); if(dm.success) MEMBRES_CACHE=dm.data.membres; } return vuePresences(); }
   if(vue==="utilisateurs"){ const d=await api("/utilisateurs/"); if(d.success) MOI_CACHE=d.data.utilisateurs; return vueUtilisateurs(); }
   if(vue==="roles") return vueRoles();
   if(vue==="invitations"){ if(!ROLES_CACHE.length){ const r=await api("/roles/"); if(r.success){ROLES_CACHE=r.data.roles;MODULES=r.data.modules;ACTIONS=r.data.actions;} } return vueInvitations(); }

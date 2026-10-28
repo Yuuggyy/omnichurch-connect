@@ -122,3 +122,170 @@ class JournalAudit(models.Model):
 
     def __str__(self):
         return f"[{self.module}] {self.action} — {self.utilisateur}"
+
+
+# ═══════════════════════════════════════════════════════════════
+# PHASE 2 — Membres, effectifs déclarés, groupes, présences
+# ═══════════════════════════════════════════════════════════════
+
+class Membre(models.Model):
+    """Dossier individuel d'un membre. Toujours rattaché à une seule Église."""
+    STATUTS = [
+        ("actif", "Actif"), ("visiteur", "Visiteur"), ("nouveau", "Nouveau venu"),
+        ("integration", "En intégration"), ("transfere", "Transféré"),
+        ("suspendu", "Suspendu"), ("decede", "Décédé"),
+    ]
+    ETATS_VALIDATION = [("brouillon", "Brouillon"), ("a_valider", "À valider"),
+                        ("valide", "Validé"), ("retourne", "Retourné"), ("rejete", "Rejeté")]
+    SEXES = [("M", "Masculin"), ("F", "Féminin")]
+
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="membres")
+    matricule = models.CharField(max_length=40, blank=True, default="")
+    nom = models.CharField(max_length=120)
+    postnom = models.CharField(max_length=120, blank=True, default="")
+    prenom = models.CharField(max_length=120, blank=True, default="")
+    sexe = models.CharField(max_length=1, choices=SEXES, blank=True, default="")
+    date_naissance = models.DateField(null=True, blank=True)
+    lieu_naissance = models.CharField(max_length=150, blank=True, default="")
+    nationalite = models.CharField(max_length=80, blank=True, default="Congolaise (RDC)")
+    profession = models.CharField(max_length=120, blank=True, default="")
+    etat_civil = models.CharField(max_length=40, blank=True, default="")
+    telephone = models.CharField(max_length=40, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    adresse = models.CharField(max_length=250, blank=True, default="")
+    contact_urgence = models.CharField(max_length=200, blank=True, default="")
+    date_adhesion = models.DateField(null=True, blank=True)
+    date_ordination = models.DateField(null=True, blank=True)
+    statut = models.CharField(max_length=20, choices=STATUTS, default="nouveau")
+    etat_validation = models.CharField(max_length=20, choices=ETATS_VALIDATION, default="a_valider")
+    observation = models.TextField(blank=True, default="")
+    motif_rejet = models.CharField(max_length=400, blank=True, default="")
+    photo_url = models.CharField(max_length=500, blank=True, default="")
+    valide_le = models.DateTimeField(null=True, blank=True)
+    valide_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="membres_valides")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="membres_crees")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nom", "postnom", "prenom"]
+        constraints = [
+            models.UniqueConstraint(fields=["eglise", "matricule"],
+                                    condition=~models.Q(matricule=""),
+                                    name="matricule_unique_par_eglise"),
+        ]
+
+    def __str__(self):
+        return f"{self.nom_complet} ({self.matricule or 'sans matricule'})"
+
+    @property
+    def nom_complet(self):
+        return " ".join(p for p in [self.nom, self.postnom, self.prenom] if p)
+
+
+class ParametreMatricule(models.Model):
+    """Format du matricule, configurable par Église. Exemple : ELM-2026-0001"""
+    eglise = models.OneToOneField(Eglise, on_delete=models.CASCADE, related_name="matricule_param")
+    prefixe = models.CharField(max_length=20, default="EGL")
+    inclure_annee = models.BooleanField(default=True)
+    chiffres = models.IntegerField(default=4)
+    separateur = models.CharField(max_length=3, default="-")
+    compteur = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"matricule {self.eglise.slug} : {self.prefixe}…"
+
+
+class EffectifDeclare(models.Model):
+    """Effectif global déclaré des personnes sans dossier individuel.
+    Total général = somme des effectifs déclarés + membres enregistrés."""
+    CATEGORIES = [("adultes", "Adultes"), ("hommes", "Hommes"), ("femmes", "Femmes"),
+                  ("jeunes", "Jeunes"), ("enfants", "Enfants"), ("invites", "Invités"),
+                  ("autre", "Autre")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="effectifs")
+    categorie = models.CharField(max_length=30, choices=CATEGORIES, default="adultes")
+    valeur = models.IntegerField(default=0)
+    periode = models.CharField(max_length=40, blank=True, default="")
+    observation = models.CharField(max_length=400, blank=True, default="")
+    auteur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class Groupe(models.Model):
+    """Départements, ministères, cellules, chorales, équipes."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="groupes")
+    nom = models.CharField(max_length=150)
+    type = models.CharField(max_length=60, blank=True, default="département")
+    description = models.CharField(max_length=400, blank=True, default="")
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="sous_groupes")
+    responsable = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="groupes_diriges")
+    actif = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["nom"]
+
+    def __str__(self):
+        return f"{self.nom} ({self.eglise.slug})"
+
+
+class MembreGroupe(models.Model):
+    membre = models.ForeignKey(Membre, on_delete=models.CASCADE, related_name="appartenances")
+    groupe = models.ForeignKey(Groupe, on_delete=models.CASCADE, related_name="membres")
+    fonction = models.CharField(max_length=80, blank=True, default="membre")
+    date_debut = models.DateField(null=True, blank=True)
+    date_fin = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["membre", "groupe"], name="un_membre_une_fois_par_groupe"),
+        ]
+
+
+class Evenement(models.Model):
+    """Activité pointée : culte, réunion, prière. Le calendrier complet arrive en Phase 3."""
+    TYPES = [("culte", "Culte"), ("reunion", "Réunion"), ("priere", "Prière"),
+             ("veillee", "Veillée"), ("formation", "Formation"), ("autre", "Autre")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="evenements")
+    titre = models.CharField(max_length=200)
+    type = models.CharField(max_length=20, choices=TYPES, default="culte")
+    date = models.DateField()
+    heure = models.CharField(max_length=10, blank=True, default="")
+    lieu = models.CharField(max_length=200, blank=True, default="")
+    groupe = models.ForeignKey(Groupe, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="evenements")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date"]
+
+
+class Presence(models.Model):
+    """Pointage. Soit un membre identifié, soit un visiteur, soit un effectif global."""
+    STATUTS = [("present", "Présent"), ("retard", "Retard"), ("absent", "Absent")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="presences")
+    evenement = models.ForeignKey(Evenement, on_delete=models.CASCADE, related_name="presences")
+    membre = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.CASCADE,
+                               related_name="presences")
+    visiteur_nom = models.CharField(max_length=200, blank=True, default="")
+    statut = models.CharField(max_length=10, choices=STATUTS, default="present")
+    effectif_global = models.IntegerField(null=True, blank=True,
+                                          help_text="Nombre de personnes non identifiées présentes")
+    observation = models.CharField(max_length=300, blank=True, default="")
+    pointe_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["evenement", "membre"],
+                                    condition=models.Q(membre__isnull=False),
+                                    name="un_pointage_par_membre_et_evenement"),
+        ]
