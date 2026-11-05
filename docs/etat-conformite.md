@@ -133,6 +133,13 @@ Budgets par département, activité ou projet, avec consommation, engagé, payé
 Clôture mensuelle en deux temps (préparation puis approbation par une autre personne), verrouillage de la période et passage des opérations payées en « clôturé ». Rapprochements de caisse, de banque et de Mobile Money avec écart obligatoirement justifié. Rapport annuel mois par mois, export CSV, tableau de bord des soldes.
 Vérification : 60 tests automatisés, tous réussis. Déployé et testé en ligne le 5 novembre 2026 (taux 2850 CDF/USD, recette de 250 000 CDF convertie à 87,72 USD, reçu REC-2026-00001, dépense approuvée puis payée, solde recalculé).
 
+## 14. Intervenants et bibliothèque média — FAIT (Phase 5)
+Répertoire des orateurs (pasteurs, évangélistes, prophètes, chanteurs, formateurs, autres) avec organisation, ville, spécialités, tarif et devise. Rattachement au dossier membre sans doublon : si le membre est déjà intervenant, la fiche existante est renvoyée au lieu d'en créer une seconde.
+Coordonnées protégées : téléphone, email et notes ne sortent que pour les détenteurs du droit de validation du module ; un simple consultant voit la mention contact restreint.
+Disponibilités par date, invitations rattachables à un événement avec statuts proposée, confirmée, déclinée, annulée, effectuée. Une invitation est refusée si l'intervenant s'est déclaré indisponible ce jour-là.
+Médiathèque audio, vidéo et documentaire : titre, type, catégorie, intervenant, date, thème, série, référence biblique, durée, lien ou fichier, transcription, playlist, licence. La diffusion est bloquée tant que l'autorisation n'est pas cochée : lecture refusée avec message sur la licence, puis autorisée une fois validée. Les écoutes sont comptées.
+Vérification : 28 tests automatisés, tous réussis, et lecture refusée puis autorisée vérifiée en ligne. Déployé le 5 novembre 2026.
+
 ## 15 et 19. Enfants et école du dimanche — FAIT (Phase 5)
 Fiches protégées et numérotées (ENF-AAAA-0001) avec âge calculé, parents et tuteurs, contacts d'urgence, autorisations photo et sortie, informations de santé et besoins particuliers.
 Sécurité réelle : santé et besoins ne sortent de la base que pour les détenteurs du droit de validation du module enfants ; pour un moniteur, la fiche indique simplement que l'information est restreinte. Toute consultation sensible et toute modification sensible sont journalisées.

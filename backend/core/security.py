@@ -17,6 +17,8 @@ MODULES = {
     "patrimoine": "Patrimoine",
     "pastoral": "Suivi pastoral",
     "enfants": "Enfants & école du dimanche",
+    "intervenants": "Intervenants",
+    "mediatheque": "Bibliothèque média",
     "parametres": "Paramètres",
     "utilisateurs": "Utilisateurs & rôles",
 }

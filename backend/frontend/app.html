@@ -154,6 +154,7 @@ function construireNav(){
   if(perm("finances","consulter")) items.push(["finances","₣","Finances","Finance"]);
   if(perm("evenements","consulter")) items.push(["calendrier","▦","Calendrier","Calendar"]);
   if(perm("pastoral","consulter")) items.push(["pastoral","✝","Suivi pastoral","Pastoral care"]);
+  if(perm("intervenants","consulter")) items.push(["intervenants","♫","Intervenants","Speakers"]);
   if(perm("enfants","consulter")) items.push(["enfants","◕","Enfants","Children"]);
   if(perm("presences","consulter")) items.push(["presences","✓","Présences","Attendance"]);
   if(perm("utilisateurs","consulter")) items.push(["utilisateurs","👥","Utilisateurs","Users"]);
@@ -1207,6 +1208,132 @@ async function sortieEnfant(id){
   toast(t("Départ enregistré","Pickup saved")); enfDetail(id);
 }
 
+
+// ═══════════ Intervenants et médiathèque (Phase 5d) ═══════════
+let ITV_ONGLET = "repertoire";
+async function vueIntervenants(){
+  const b = await api("/intervenants/bord/");
+  const k = b.success ? b.data : {};
+  main.innerHTML = `
+  <div class="top"><h2>${t("Intervenants et bibliothèque","Speakers and library")}</h2>
+    <div class="row">
+      ${perm("intervenants","creer")?`<button class="btn" onclick="formIntervenant()">+ ${t("Intervenant","Speaker")}</button>`:""}
+      ${perm("mediatheque","creer")?`<button class="btn ghost" onclick="formMedia()">+ ${t("Média","Media")}</button>`:""}
+    </div></div>
+  <div class="cards">
+    <div class="stat"><div class="n">${k.intervenants||0}</div><div class="l">${t("INTERVENANTS","SPEAKERS")}</div></div>
+    <div class="stat"><div class="n">${k.disponibles||0}</div><div class="l">${t("DISPONIBLES","AVAILABLE")}</div></div>
+    <div class="stat"><div class="n">${k.invitations_en_attente||0}</div><div class="l">${t("INVITATIONS EN ATTENTE","PENDING INVITES")}</div></div>
+    <div class="stat"><div class="n">${k.interventions_mois||0}</div><div class="l">${t("INTERVENTIONS DU MOIS","THIS MONTH")}</div></div>
+    <div class="stat"><div class="n">${k.medias||0}</div><div class="l">${t("MÉDIAS","MEDIA")}</div></div>
+    <div class="stat"><div class="n">${k.sans_licence||0}</div><div class="l">${t("SANS AUTORISATION","NOT CLEARED")}</div></div>
+  </div>
+  <div class="row" style="margin:18px 0 12px">
+    <button class="btn ${ITV_ONGLET==="repertoire"?"":"ghost"}" onclick="ITV_ONGLET='repertoire';vueIntervenants()">${t("Répertoire","Directory")}</button>
+    <button class="btn ${ITV_ONGLET==="medias"?"":"ghost"}" onclick="ITV_ONGLET='medias';vueIntervenants()">${t("Médiathèque","Library")}</button>
+  </div>
+  <div class="panel" style="max-width:100%" id="itv-zone"><div class="muted">…</div></div>`;
+  if(ITV_ONGLET==="repertoire") return itvRepertoire();
+  return itvMedias();
+}
+
+async function itvRepertoire(){
+  const d = await api("/intervenants/");
+  const z = document.getElementById("itv-zone");
+  if(!d.success){ z.innerHTML = `<div class="muted">${d.error||""}</div>`; return; }
+  z.innerHTML = `<table><thead><tr><th>${t("Nom","Name")}</th><th>${t("Type","Type")}</th>
+    <th>${t("Organisation","Organisation")}</th><th>${t("Contact","Contact")}</th>
+    <th>${t("Interventions","Talks")}</th><th></th></tr></thead><tbody>
+    ${d.data.intervenants.map(x=>`<tr><td><b>${x.nom}</b></td><td>${x.type}</td>
+      <td class="muted">${x.organisation||"—"}</td>
+      <td class="muted">${x.contact_restreint?"<span class='pill bad'>"+t("restreint","restricted")+"</span>":(x.telephone||x.email||"—")}</td>
+      <td>${x.interventions}</td>
+      <td>${perm("intervenants","creer")?`<button class="act" onclick="formInvitation(${x.id})">${t("Inviter","Invite")}</button>`:""}</td></tr>`).join("")
+      ||`<tr><td colspan="6" class="muted">${t("Aucun intervenant.","No speaker yet.")}</td></tr>`}</tbody></table>`;
+}
+
+async function itvMedias(){
+  const d = await api("/mediatheque/");
+  const z = document.getElementById("itv-zone");
+  if(!d.success){ z.innerHTML = `<div class="muted">${d.error||""}</div>`; return; }
+  z.innerHTML = `<table><thead><tr><th>${t("Titre","Title")}</th><th>${t("Type","Type")}</th>
+    <th>${t("Intervenant","Speaker")}</th><th>${t("Série","Series")}</th><th>${t("Référence","Reference")}</th>
+    <th>${t("Licence","Licence")}</th><th></th></tr></thead><tbody>
+    ${d.data.medias.map(m=>`<tr><td><b>${m.titre}</b><br><span class="muted" style="font-size:11px">${m.date||""} ${m.duree_minutes?("· "+m.duree_minutes+" min"):""}</span></td>
+      <td>${m.type}</td><td class="muted">${m.intervenant||"—"}</td><td class="muted">${m.serie||"—"}</td>
+      <td class="muted">${m.reference_biblique||"—"}</td>
+      <td>${m.diffusion_autorisee?"✓":"<span class='pill bad'>"+t("non vérifiée","unverified")+"</span>"}</td>
+      <td><button class="act" onclick="lireMedia(${m.id})">${t("Écouter","Play")}</button></td></tr>`).join("")
+      ||`<tr><td colspan="7" class="muted">${t("Aucun média.","No media yet.")}</td></tr>`}</tbody></table>`;
+}
+
+function formIntervenant(){
+  ouvrirModale(t("Nouvel intervenant","New speaker"), `
+    <label>${t("Nom","Name")}</label><input id="iv-nom">
+    <label>${t("Type","Type")}</label><select id="iv-type">${["pasteur","evangeliste","prophete","chanteur","formateur","orateur","autre"].map(x=>`<option>${x}</option>`).join("")}</select>
+    <label>${t("Organisation","Organisation")}</label><input id="iv-org">
+    <label>${t("Téléphone","Phone")}</label><input id="iv-tel">
+    <label>${t("Email","Email")}</label><input id="iv-email">
+    <label>${t("Spécialités","Specialities")}</label><input id="iv-spec">
+    <label>${t("Tarif et devise","Fee and currency")}</label>
+    <div class="row"><input id="iv-tarif" type="number" style="flex:2"><select id="iv-devise" style="flex:1"><option>USD</option><option>CDF</option></select></div>
+    <div class="row" style="margin-top:14px"><button class="btn" onclick="creeIntervenant()">${t("Enregistrer","Save")}</button></div>`);
+}
+
+async function creeIntervenant(){
+  const d = await api("/intervenant/creer/", {nom:v("iv-nom"), type:v("iv-type"), organisation:v("iv-org"),
+    telephone:v("iv-tel"), email:v("iv-email"), specialites:v("iv-spec"),
+    tarif:v("iv-tarif"), devise:v("iv-devise")});
+  if(!d.success){ toast(d.error, true); return; }
+  fermeMod(); toast(t("Intervenant enregistré","Speaker saved")); vueIntervenants();
+}
+
+function formInvitation(id){
+  ouvrirModale(t("Inviter un intervenant","Invite a speaker"), `
+    <label>${t("Objet","Subject")}</label><input id="iv-obj" placeholder="${t("Culte du dimanche","Sunday service")}">
+    <label>${t("Date","Date")}</label><input id="iv-date" type="date">
+    <label>${t("Thème","Theme")}</label><input id="iv-theme">
+    <div class="row" style="margin-top:14px"><button class="btn" onclick="creeInvitation(${id})">${t("Envoyer l'invitation","Send invitation")}</button></div>`);
+}
+
+async function creeInvitation(id){
+  const d = await api("/intervenant/inviter/", {intervenant_id:id, objet:v("iv-obj"),
+    date:v("iv-date"), theme:v("iv-theme")});
+  if(!d.success){ toast(d.error, true); return; }
+  fermeMod(); toast(t("Invitation proposée","Invitation sent")); vueIntervenants();
+}
+
+function formMedia(){
+  ouvrirModale(t("Nouveau média","New media"), `
+    <label>${t("Titre","Title")}</label><input id="md-titre">
+    <div class="row"><select id="md-type" style="flex:1"><option value="audio">Audio</option><option value="video">Vidéo</option><option value="document">Document</option></select>
+      <select id="md-cat" style="flex:1">${["predication","enseignement","chant","conference","etude","plan_lecture","manuel","brochure","priere","autre"].map(x=>`<option>${x}</option>`).join("")}</select></div>
+    <label>${t("Lien du fichier","File link")}</label><input id="md-url">
+    <label>${t("Série","Series")}</label><input id="md-serie">
+    <label>${t("Référence biblique","Bible reference")}</label><input id="md-ref">
+    <div class="row"><input id="md-date" type="date" style="flex:1"><input id="md-duree" type="number" placeholder="min" style="flex:1"></div>
+    <label>${t("Licence / autorisation de diffusion","Licence / clearance")}</label><input id="md-licence">
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="md-autorise"> ${t("Diffusion autorisée","Cleared for playback")}</label>
+    <div class="row" style="margin-top:14px"><button class="btn" onclick="creeMedia()">${t("Publier","Publish")}</button></div>`);
+}
+
+async function creeMedia(){
+  const d = await api("/media/creer/", {titre:v("md-titre"), type:v("md-type"), categorie:v("md-cat"),
+    url:v("md-url"), serie:v("md-serie"), reference_biblique:v("md-ref"), date:v("md-date"),
+    duree_minutes:v("md-duree"), licence:v("md-licence"),
+    diffusion_autorisee:document.getElementById("md-autorise").checked});
+  if(!d.success){ toast(d.error, true); return; }
+  fermeMod(); toast(t("Média publié","Media published")); vueIntervenants();
+}
+
+async function lireMedia(id){
+  const d = await api("/media/ecouter/", {id});
+  if(!d.success){ toast(d.error, true); return; }
+  ouvrirModale(d.data.titre, `<audio controls src="${d.data.url}" style="width:100%"></audio>
+    ${d.data.transcription?`<p style="margin-top:12px;font-size:12.5px">${d.data.transcription}</p>`:""}
+    <p class="muted" style="font-size:11px;margin-top:10px">${d.data.url}</p>`);
+}
+
 // ─── Calendrier (Phase 3) ───
 let CAL_MOIS = (function(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); })();
 let CAL_DATA = null;
@@ -1539,6 +1666,7 @@ async function afficherVue(){
   if(vue==="effectifs") return vueEffectifs();
   if(vue==="groupes") return vueGroupes();
   if(vue==="pastoral") return vuePastoral();
+  if(vue==="intervenants") return vueIntervenants();
   if(vue==="enfants") return vueEnfants();
   if(vue==="presences"){ if(!MEMBRES_CACHE.length){ const dm=await api("/membres/?limit=100"); if(dm.success) MEMBRES_CACHE=dm.data.membres; } return vuePresences(); }
   if(vue==="patrimoine") return vuePatrimoine();

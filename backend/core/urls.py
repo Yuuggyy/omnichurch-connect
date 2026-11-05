@@ -6,6 +6,7 @@ from . import views_finances as fin
 from . import views_patrimoine as pat
 from . import views_pastoral as pas
 from . import views_enfants as enf
+from . import views_intervenants as itv
 
 urlpatterns = [
     # Auth
@@ -144,6 +145,19 @@ urlpatterns = [
     path("enfants/lecon/creer/", enf.lecon_creer),
     path("enfants/progression/", enf.progression_enregistrer),
     path("enfants/export/", enf.enfants_export),
+    # ── Phase 5 : intervenants et médiathèque
+    path("intervenants/", itv.intervenants_liste),
+    path("intervenants/bord/", itv.intervenants_bord),
+    path("intervenant/creer/", itv.intervenant_creer),
+    path("intervenant/modifier/", itv.intervenant_modifier),
+    path("intervenant/disponibilite/", itv.disponibilite_ajouter),
+    path("intervenants/invitations/", itv.invitation_liste),
+    path("intervenant/inviter/", itv.invitation_creer),
+    path("invitation/statut/", itv.invitation_statut),
+    path("mediatheque/", itv.medias_liste),
+    path("media/creer/", itv.media_creer),
+    path("media/modifier/", itv.media_modifier),
+    path("media/ecouter/", itv.media_ecouter),
     # ── Phase 2 : documents de base
     path("document/fiche/", m.document_fiche),
     path("document/carte/", m.document_carte),

@@ -859,3 +859,101 @@ class ProgressionEnfant(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["enfant", "lecon"], name="unique_progression_enfant_lecon")]
+
+
+# ═══════════════ Phase 5d : intervenants et bibliothèque média (section 14) ═══════════════
+
+class Intervenant(models.Model):
+    """Répertoire des orateurs. Coordonnées protégées, rattachement au dossier membre."""
+    TYPES = [("pasteur", "Pasteur"), ("evangeliste", "Évangéliste"), ("prophete", "Prophète"),
+             ("chanteur", "Chanteur"), ("formateur", "Formateur"), ("orateur", "Orateur"),
+             ("autre", "Autre")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="intervenants")
+    membre = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="interventions")
+    nom = models.CharField(max_length=150)
+    type = models.CharField(max_length=20, choices=TYPES, default="orateur")
+    organisation = models.CharField(max_length=180, blank=True, default="")
+    telephone = models.CharField(max_length=40, blank=True, default="")
+    email = models.CharField(max_length=150, blank=True, default="")
+    ville = models.CharField(max_length=120, blank=True, default="")
+    specialites = models.CharField(max_length=300, blank=True, default="")
+    tarif = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    devise = models.CharField(max_length=3, default="USD")
+    disponible = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, default="")
+    document_url = models.CharField(max_length=500, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["nom"]
+
+    def __str__(self):
+        return self.nom
+
+
+class DisponibiliteIntervenant(models.Model):
+    intervenant = models.ForeignKey(Intervenant, on_delete=models.CASCADE, related_name="disponibilites")
+    date = models.DateField()
+    note = models.CharField(max_length=200, blank=True, default="")
+    disponible = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["date"]
+
+
+class InvitationIntervenant(models.Model):
+    STATUTS = [("proposee", "Proposée"), ("confirmee", "Confirmée"), ("declinee", "Déclinée"),
+               ("annulee", "Annulée"), ("effectuee", "Effectuée")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="invitations_intervenants")
+    intervenant = models.ForeignKey(Intervenant, on_delete=models.CASCADE, related_name="invitations")
+    evenement = models.ForeignKey(Evenement, null=True, blank=True, on_delete=models.SET_NULL,
+                                  related_name="invitations")
+    objet = models.CharField(max_length=200, blank=True, default="")
+    date = models.DateField(null=True, blank=True)
+    statut = models.CharField(max_length=12, choices=STATUTS, default="proposee")
+    theme = models.CharField(max_length=200, blank=True, default="")
+    note = models.CharField(max_length=300, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+
+class Media(models.Model):
+    """Bibliothèque audio, vidéo et documentaire."""
+    TYPES = [("audio", "Audio"), ("video", "Vidéo"), ("document", "Document")]
+    CATEGORIES = [("predication", "Prédication"), ("enseignement", "Enseignement"),
+                  ("chant", "Chant"), ("conference", "Conférence"), ("etude", "Étude biblique"),
+                  ("plan_lecture", "Plan de lecture"), ("manuel", "Manuel"),
+                  ("brochure", "Brochure"), ("priere", "Programme de prière"), ("autre", "Autre")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="medias")
+    titre = models.CharField(max_length=200)
+    type = models.CharField(max_length=10, choices=TYPES, default="audio")
+    categorie = models.CharField(max_length=20, choices=CATEGORIES, default="predication")
+    intervenant = models.ForeignKey(Intervenant, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="medias")
+    date = models.DateField(null=True, blank=True)
+    theme = models.CharField(max_length=200, blank=True, default="")
+    serie = models.CharField(max_length=150, blank=True, default="")
+    reference_biblique = models.CharField(max_length=150, blank=True, default="")
+    duree_minutes = models.IntegerField(null=True, blank=True)
+    url = models.CharField(max_length=600, blank=True, default="")
+    fichier_url = models.CharField(max_length=600, blank=True, default="")
+    transcription = models.TextField(blank=True, default="")
+    playlist = models.CharField(max_length=150, blank=True, default="")
+    licence = models.CharField(max_length=200, blank=True, default="")
+    diffusion_autorisee = models.BooleanField(default=False)
+    public = models.BooleanField(default=False)
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="medias_ajoutes")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+
+class MediaVu(models.Model):
+    media = models.ForeignKey(Media, on_delete=models.CASCADE, related_name="ecoutes")
+    utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
+    le = models.DateTimeField(auto_now_add=True)
