@@ -55,6 +55,23 @@ input:focus,select:focus{border-color:var(--gold)}
 .perm-grid .acts{display:flex;gap:6px;flex-wrap:wrap}
 .ck{background:rgba(10,16,30,.7);border:1px solid var(--line);color:var(--muted);font-size:10.5px;padding:4px 9px;border-radius:7px;cursor:pointer;font-family:inherit}
 .ck.on{color:#101523;background:var(--gold);border-color:var(--gold);font-weight:600}
+.fin-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0}
+.fin-kpi .k{background:linear-gradient(170deg,var(--navy2),rgba(24,37,66,.4));border:1px solid var(--line);border-radius:12px;padding:16px}
+.fin-kpi .k b{display:block;font-family:'Cormorant Garamond',serif;font-size:26px;color:var(--gold2);margin-bottom:4px}
+.fin-kpi .k span{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.fin-onglets{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0 4px;border-bottom:1px solid var(--line);padding-bottom:10px}
+.fin-onglets button{background:none;border:1px solid var(--line);color:var(--muted);padding:7px 14px;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer}
+.fin-onglets button.on{background:rgba(201,162,39,.14);border-color:rgba(201,162,39,.5);color:var(--gold2);font-weight:600}
+.fin-tab{max-width:100%;margin-top:18px}
+.fin-tab table{width:100%;border-collapse:collapse;font-size:12.5px}
+.fin-tab th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line)}
+.fin-tab td{padding:9px 6px;border-bottom:1px solid rgba(139,148,168,.1);vertical-align:top}
+.fin-tab .act{background:none;border:1px solid var(--line);color:var(--gold2);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-right:4px;font-family:inherit}
+.fin-tab .act.ok{border-color:rgba(59,178,115,.5);color:#9fdCB9}
+.fin-tab .act.bad{border-color:rgba(224,86,75,.45);color:#f2a49d}
+.fin-bar{height:5px;background:rgba(139,148,168,.2);border-radius:4px;overflow:hidden;margin-top:5px;width:110px}
+.fin-bar i{display:block;height:100%;background:var(--gold)}
+.fin-bar i.warn{background:#E08C4B}.fin-bar i.danger{background:#E0564B}
 .cal-tete{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 6px}
 .cal-tete h2{font-family:'Cormorant Garamond',serif;font-size:27px;color:var(--gold2);margin-right:auto}
 .cal-grille{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
@@ -133,6 +150,7 @@ function construireNav(){
   if(perm("membres","consulter")) items.push(["membres","✦","Membres","Members"]);
   if(perm("membres","consulter")) items.push(["effectifs","Σ","Effectifs","Headcount"]);
   if(perm("groupes","consulter")) items.push(["groupes","⌘","Groupes","Groups"]);
+  if(perm("finances","consulter")) items.push(["finances","₣","Finances","Finance"]);
   if(perm("evenements","consulter")) items.push(["calendrier","▦","Calendrier","Calendar"]);
   if(perm("presences","consulter")) items.push(["presences","✓","Présences","Attendance"]);
   if(perm("utilisateurs","consulter")) items.push(["utilisateurs","👥","Utilisateurs","Users"]);
@@ -673,6 +691,286 @@ async function supprimerPresence(id){
   if(d.success){ toast("✓"); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
 }
 
+// ─── Finances (Phase 4) ───
+let FIN_ONGLET = "bord";
+let FIN_DONNEES = {bord:null, comptes:null, mouvements:null, budgets:null, projets:null, clôtures:null};
+const STATUTS_FIN = {demande:"Demandé",a_verifier:"À vérifier",approuve:"Approuvé",rejete:"Rejeté",paye:"Payé",cloture:"Clôturé",annule:"Annulé"};
+
+async function vueFinances(){
+  const D = MODULES.finances ? {} : {};
+  const bord = await api("/finances/bord/");
+  if(!bord.success){ main.innerHTML = `<div class="panel">${bord.error||"Erreur"}</div>`; return; }
+  let corps = "";
+  if(FIN_ONGLET === "bord") corps = finBord(bord.data);
+  else if(FIN_ONGLET === "comptes") corps = await finComptes();
+  else if(FIN_ONGLET === "operations") corps = await finOperations();
+  else if(FIN_ONGLET === "budgets") corps = await finBudgets();
+  else if(FIN_ONGLET === "projets") corps = await finProjets();
+  else if(FIN_ONGLET === "clotures") corps = await finClotures();
+  const onglets = [["bord","Tableau de bord"],["comptes","Comptes & caisses"],["operations","Opérations"],["budgets","Budgets"],["projets","Projets"],["clotures","Clôtures"]];
+  main.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:27px;color:var(--gold2);margin-right:auto">${t("Finances","Finance")}</h2>
+      ${perm("finances","exporter")?`<button class="btn ghost" onclick="finExport()">CSV</button>`:""}
+      ${perm("finances","creer")?`<button class="btn" onclick="formOperation()">+ ${t("Opération","Entry")}</button>`:""}
+    </div>
+    <div class="fin-onglets">${onglets.map(([k,l])=>`<button class="${FIN_ONGLET===k?"on":""}" onclick="FIN_ONGLET='${k}';vueFinances()">${l}</button>`).join("")}</div>
+    ${corps}`;
+}
+
+function finBord(d){
+  const s = d.soldes.map(x=>`<div class="k"><b>${x.solde}</b><span>${x.compte} · ${x.devise}</span></div>`).join("");
+  const cat = d.par_categorie.slice(0,8).map(x=>`<tr><td>${x.categorie}</td><td>${x.sens==="recette"?"Recette":"Dépense"}</td><td style="text-align:right;color:${x.sens==="recette"?"#9fdCB9":"#f2a49d"}">${x.total}</td></tr>`).join("");
+  return `<div class="fin-kpi">
+      <div class="k"><b>${d.recettes_mois}</b><span>${t("Recettes du mois","Income this month")} (${d.devise_reference})</span></div>
+      <div class="k"><b>${d.depenses_mois}</b><span>${t("Dépenses du mois","Expenses this month")}</span></div>
+      <div class="k"><b>${d.recettes_annee}</b><span>${t("Recettes de l'année","Income this year")}</span></div>
+      <div class="k"><b>${d.a_valider}</b><span>${t("À valider","To approve")}</span></div>
+      <div class="k"><b>${d.sans_justificatif}</b><span>${t("Sans justificatif","No receipt")}</span></div>
+    </div>
+    <h3 style="margin-top:6px;color:var(--gold2);font-family:'Cormorant Garamond',serif;font-size:20px">${t("Soldes des comptes","Account balances")}</h3>
+    <div class="fin-kpi">${s||`<p class="muted">${t("Aucun compte.","No account yet.")}</p>`}</div>
+    <div class="fin-tab"><table><thead><tr><th>${t("Catégorie","Category")}</th><th>${t("Sens","Type")}</th><th style="text-align:right">${t("Mois en cours","This month")}</th></tr></thead><tbody>${cat||`<tr><td colspan="3" class="muted">${t("Aucune opération ce mois-ci.","No entry this month.")}</td></tr>`}</tbody></table></div>`;
+}
+
+async function finComptes(){
+  const d = await api("/finances/comptes/");
+  if(!d.success) return `<p class="muted">${d.error}</p>`;
+  const lignes = d.data.comptes.map(x=>`<tr><td><b>${x.nom}</b><br><span class="muted" style="font-size:11px">${x.type}${x.responsable?" · "+x.responsable:""}</span></td>
+    <td>${x.devise}</td><td style="text-align:right">${x.solde}</td>
+    <td>${perm("finances","creer")?`<button class="act" onclick="formTransfert(${x.id})">${t("Transférer","Transfer")}</button>`:""}
+        ${perm("finances","valider")?`<button class="act" onclick="formRapprochement(${x.id})">${t("Rapprocher","Reconcile")}</button>`:""}</td></tr>`).join("");
+  return `<div style="margin-top:12px;display:flex;gap:8px">
+      ${perm("finances","creer")?`<button class="btn ghost" onclick="formCompte()">+ ${t("Compte","Account")}</button>
+      <button class="btn ghost" onclick="formTaux()">+ ${t("Taux de change","Exchange rate")}</button>`:""}
+    </div>
+    <div class="fin-tab"><table><thead><tr><th>${t("Compte","Account")}</th><th>${t("Devise","Currency")}</th><th style="text-align:right">${t("Solde","Balance")}</th><th></th></tr></thead>
+    <tbody>${lignes||`<tr><td colspan="4" class="muted">${t("Aucun compte enregistré.","No account yet.")}</td></tr>`}</tbody></table></div>`;
+}
+
+async function finOperations(){
+  const d = await api("/finances/mouvements/");
+  if(!d.success) return `<p class="muted">${d.error}</p>`;
+  const lignes = d.data.mouvements.slice(0,80).map(m=>`<tr>
+    <td>${m.date}</td>
+    <td><b>${m.libelle}</b><br><span class="muted" style="font-size:11px">${m.compte}${m.categorie?" · "+m.categorie:""}${m.projet?" · "+m.projet:""}${m.donateur?" · "+m.donateur:""}${m.reference_recu?" · "+m.reference_recu:""}</span></td>
+    <td style="color:${m.sens==="recette"?"#9fdCB9":"#f2a49d"};white-space:nowrap">${m.sens==="recette"?"+":"−"} ${m.montant} ${m.devise}</td>
+    <td><span class="pill ${m.statut==="paye"||m.statut==="cloture"?"okk":(m.statut==="rejete"||m.statut==="annule"?"bad":"")}">${STATUTS_FIN[m.statut]||m.statut}</span>${m.justificatif?"":"<br><span class='pill bad' style='margin-top:4px'>sans pièce</span>"}</td>
+    <td style="white-space:nowrap">${finActions(m)}</td></tr>`).join("");
+  return `<div class="fin-kpi">
+      <div class="k"><b>${d.data.totaux.recette.total}</b><span>${t("Recettes enregistrées","Recorded income")}</span></div>
+      <div class="k"><b>${d.data.totaux.depense.total}</b><span>${t("Dépenses enregistrées","Recorded expenses")}</span></div>
+      <div class="k"><b>${d.data.totaux.depense.en_attente}</b><span>${t("Dépenses en attente","Pending expenses")}</span></div>
+    </div>
+    <div class="fin-tab"><table><thead><tr><th>${t("Date","Date")}</th><th>${t("Libellé","Label")}</th><th>${t("Montant","Amount")}</th><th>${t("Statut","Status")}</th><th></th></tr></thead>
+    <tbody>${lignes||`<tr><td colspan="5" class="muted">${t("Aucune opération.","No entry yet.")}</td></tr>`}</tbody></table></div>`;
+}
+
+function finActions(m){
+  if(!perm("finances","valider")) return "";
+  let b = "";
+  if(m.statut==="demande"||m.statut==="a_verifier"){
+    b += `<button class="act ok" onclick="finAction('verifier',${m.id})">${t("Vérifier","Check")}</button>`;
+    b += `<button class="act ok" onclick="finAction('approuver',${m.id})">${t("Approuver","Approve")}</button>`;
+    b += `<button class="act bad" onclick="finRejeter(${m.id})">${t("Rejeter","Reject")}</button>`;
+  }
+  if(m.statut==="approuve"){
+    b += `<button class="act ok" onclick="finAction('payer',${m.id})">${t("Payer","Pay")}</button>`;
+    if(m.double_validation_requise) b += `<button class="act" onclick="finAction('seconde-validation',${m.id})">2e ${t("validation","approval")}</button>`;
+  }
+  if(m.statut==="demande"||m.statut==="a_verifier"||m.statut==="approuve"){
+    if(perm("finances","supprimer")) b += `<button class="act bad" onclick="finAnnuler(${m.id})">✕</button>`;
+  }
+  return b;
+}
+
+async function finAction(quoi, id){
+  const r = await api("/finances/mouvement/"+quoi+"/", {id:id});
+  toast(r.success ? t("Opération mise à jour","Entry updated") : (r.error||"Erreur"), !r.success);
+  if(r.success) vueFinances();
+}
+
+async function finRejeter(id){
+  const motif = prompt(t("Motif du rejet :","Reason for rejection:"));
+  if(!motif) return;
+  const r = await api("/finances/mouvement/rejeter/", {id:id, motif:motif});
+  toast(r.success ? t("Opération rejetée","Entry rejected") : (r.error||"Erreur"), !r.success);
+  if(r.success) vueFinances();
+}
+
+async function finAnnuler(id){
+  if(!confirm(t("Annuler cette opération ?","Cancel this entry?"))) return;
+  const r = await api("/finances/mouvement/annuler/", {id:id});
+  toast(r.success ? t("Opération annulée","Entry cancelled") : (r.error||"Erreur"), !r.success);
+  if(r.success) vueFinances();
+}
+
+async function finBudgets(){
+  const d = await api("/finances/budgets/");
+  if(!d.success) return `<p class="muted">${d.error}</p>`;
+  const lignes = d.data.budgets.map(b=>{
+    const cls = b.consommation>=100?"danger":(b.consommation>=90?"danger":(b.consommation>=75?"warn":""));
+    return `<tr><td><b>${b.nom}</b><br><span class="muted" style="font-size:11px">${b.periode}${b.projet?" · "+b.projet:""}${b.groupe?" · "+b.groupe:""}</span></td>
+      <td>${b.montant} ${b.devise}<div class="fin-bar"><i class="${cls}" style="width:${Math.min(b.consommation,100)}%"></i></div><span class="muted" style="font-size:11px">${b.consommation}%</span></td>
+      <td>${b.engage}</td><td>${b.restant}</td>
+      <td>${b.alertes.map(a=>`<span class="pill ${a>=100?"bad":""}">${a}%</span>`).join(" ")}${b.blocage?`<br><span class="muted" style="font-size:10.5px">${t("dépassement bloqué","overspend blocked")}</span>`:""}</td></tr>`;
+  }).join("");
+  return `<div style="margin-top:12px">${perm("finances","creer")?`<button class="btn ghost" onclick="formBudget()">+ ${t("Budget","Budget")}</button>`:""}</div>
+    <div class="fin-tab"><table><thead><tr><th>${t("Budget","Budget")}</th><th>${t("Consommation","Usage")}</th><th>${t("Engagé","Committed")}</th><th>${t("Restant","Left")}</th><th>${t("Alertes","Alerts")}</th></tr></thead>
+    <tbody>${lignes||`<tr><td colspan="5" class="muted">${t("Aucun budget.","No budget yet.")}</td></tr>`}</tbody></table></div>`;
+}
+
+async function finProjets(){
+  const d = await api("/finances/projets/");
+  if(!d.success) return `<p class="muted">${d.error}</p>`;
+  const lignes = d.data.projets.map(p=>`<tr><td><b>${p.nom}</b><br><span class="muted" style="font-size:11px">${p.objectif||""}</span></td>
+    <td>${p.budget} ${p.devise}<div class="fin-bar"><i style="width:${Math.min(p.financement,100)}%"></i></div><span class="muted" style="font-size:11px">${p.financement}% ${t("financé","funded")}</span></td>
+    <td>${p.recu}</td><td>${p.engage}</td><td>${p.avancement}%</td></tr>`).join("");
+  return `<div style="margin-top:12px">${perm("finances","creer")?`<button class="btn ghost" onclick="formProjet()">+ ${t("Projet","Project")}</button>`:""}</div>
+    <div class="fin-tab"><table><thead><tr><th>${t("Projet","Project")}</th><th>${t("Budget","Budget")}</th><th>${t("Reçu","Raised")}</th><th>${t("Engagé","Committed")}</th><th>${t("Avancement","Progress")}</th></tr></thead>
+    <tbody>${lignes||`<tr><td colspan="5" class="muted">${t("Aucun projet.","No project yet.")}</td></tr>`}</tbody></table></div>`;
+}
+
+async function finClotures(){
+  const [d, r] = await Promise.all([api("/finances/clotures/"), api("/finances/rapprochements/")]);
+  const lig = d.success ? d.data.clotures.map(c=>`<tr><td>${c.periode}</td><td>${c.recettes}</td><td>${c.depenses}</td>
+    <td>${c.ecart}</td><td><span class="pill ${c.statut==="approuve"?"okk":""}">${c.statut}</span></td>
+    <td>${perm("finances","valider")&&c.statut==="prepare"?`<button class="act ok" onclick="finCloture('approuver',${c.id})">${t("Approuver","Approve")}</button>`:""}</td></tr>`).join("") : "";
+  const rap = r.success ? r.data.rapprochements.map(x=>`<tr><td>${x.date}</td><td>${x.compte}</td><td>${x.releve}</td><td>${x.calcule}</td>
+    <td style="color:${parseFloat(x.ecart)===0?"#9fdCB9":"#f2a49d"}">${x.ecart}</td><td class="muted">${x.justification||"—"}</td></tr>`).join("") : "";
+  return `<div style="margin-top:12px;display:flex;gap:8px">
+      ${perm("finances","valider")?`<button class="btn ghost" onclick="finCloture('preparer')">+ ${t("Préparer la clôture du mois","Prepare monthly closing")}</button>`:""}
+    </div>
+    <div class="fin-tab"><table><thead><tr><th>${t("Période","Period")}</th><th>${t("Recettes","Income")}</th><th>${t("Dépenses","Expenses")}</th><th>${t("Écart","Gap")}</th><th>${t("Statut","Status")}</th><th></th></tr></thead>
+    <tbody>${lig||`<tr><td colspan="6" class="muted">${t("Aucune clôture.","No closing yet.")}</td></tr>`}</tbody></table></div>
+    <h3 style="margin-top:22px;color:var(--gold2);font-family:'Cormorant Garamond',serif;font-size:20px">${t("Rapprochements","Reconciliations")}</h3>
+    <div class="fin-tab"><table><thead><tr><th>${t("Date","Date")}</th><th>${t("Compte","Account")}</th><th>${t("Relevé","Statement")}</th><th>${t("Calculé","Expected")}</th><th>${t("Écart","Gap")}</th><th>${t("Justification","Reason")}</th></tr></thead>
+    <tbody>${rap||`<tr><td colspan="6" class="muted">${t("Aucun rapprochement.","No reconciliation yet.")}</td></tr>`}</tbody></table></div>`;
+}
+
+async function finCloture(quoi, id){
+  const corps = quoi === "preparer" ? {periode: new Date().toISOString().slice(0,7)} : {id:id};
+  const r = await api("/finances/cloture/"+quoi+"/", corps);
+  toast(r.success ? t("Clôture mise à jour","Closing updated") : (r.error||"Erreur"), !r.success);
+  if(r.success) vueFinances();
+}
+
+function finChamp(id, label, type, valeur, options){
+  if(options) return `<div class="cal-champ"><label>${label}</label><select id="${id}">${options.map(([v,l])=>`<option value="${v}"${v===valeur?" selected":""}>${l}</option>`).join("")}</select></div>`;
+  return `<div class="cal-champ"><label>${label}</label><input id="${id}" type="${type||"text"}" value="${valeur||""}"></div>`;
+}
+
+async function formOperation(){
+  const comptes = await api("/finances/comptes/");
+  const cats = comptes.success ? comptes.data.categories : [];
+  const budgets = await api("/finances/budgets/");
+  const projets = await api("/finances/projets/");
+  const optC = (comptes.success?comptes.data.comptes:[]).map(x=>[x.id, x.nom+" ("+x.devise+")"]);
+  const optCat = cats.map(x=>[x.id, x.nom+" — "+x.sens]);
+  const optB = (budgets.success?budgets.data.budgets:[]).map(x=>[x.id, x.nom]);
+  const optP = (projets.success?projets.data.projets:[]).map(x=>[x.id, x.nom]);
+  ouvrirModale(t("Nouvelle opération","New entry"), `
+    ${finChamp("op-sens", t("Sens","Type"), "text", "recette", [["recette","Recette"],["depense","Dépense"]])}
+    ${finChamp("op-compte", t("Compte","Account"), "text", "", optC)}
+    ${finChamp("op-montant", t("Montant","Amount"), "number", "")}
+    ${finChamp("op-devise", t("Devise","Currency"), "text", "", [["CDF","CDF"],["USD","USD"]])}
+    ${finChamp("op-date", t("Date","Date"), "date", new Date().toISOString().slice(0,10))}
+    <div class="cal-champ"><label>${t("Libellé","Label")}</label><input id="op-libelle"></div>
+    ${finChamp("op-categorie", t("Catégorie","Category"), "text", "", optCat)}
+    ${optB.length?finChamp("op-budget", t("Budget (facultatif)","Budget (optional)"), "text", "", [["","—"]].concat(optB)):""}
+    ${optP.length?finChamp("op-projet", t("Projet (facultatif)","Project (optional)"), "text", "", [["","—"]].concat(optP)):""}
+    <div class="cal-champ"><label>${t("Justificatif (lien)","Receipt (link)")}</label><input id="op-justif"></div>
+    <div class="cal-champ"><label>${t("Membre ou donateur (facultatif)","Member or donor (optional)")}</label><input id="op-donateur"></div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      <button class="btn" onclick="enregistreOperation()">${t("Enregistrer","Save")}</button>
+      <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button>
+    </div>`);
+}
+
+async function enregistreOperation(){
+  const v = id => { const e = document.getElementById(id); return e ? e.value : ""; };
+  const corps = {sens:v("op-sens"), compte_id:v("op-compte"), montant:v("op-montant"),
+    devise:v("op-devise"), date:v("op-date"), libelle:v("op-libelle"),
+    categorie_id:v("op-categorie")||null, justificatif_url:v("op-justif"),
+    donateur_nom:v("op-donateur"),
+    budget_id:(document.getElementById("op-budget")||{}).value||null,
+    projet_id:(document.getElementById("op-projet")||{}).value||null};
+  const r = await api("/finances/mouvement/creer/", corps);
+  toast(r.success ? t("Opération enregistrée","Entry saved") : (r.error||"Erreur"), !r.success);
+  if(r.success){ fermeMod(); FIN_ONGLET="operations"; vueFinances(); }
+}
+
+function formCompte(){
+  ouvrirModale(t("Nouveau compte","New account"), `
+    <div class="cal-champ"><label>${t("Nom","Name")}</label><input id="cp-nom"></div>
+    ${finChamp("cp-type", t("Type","Type"), "text", "espece", [["espece","Espèces"],["banque","Banque"],["mobile_money","Mobile Money"],["autre","Autre"]])}
+    ${finChamp("cp-devise", t("Devise","Currency"), "text", "CDF", [["CDF","CDF"],["USD","USD"]])}
+    ${finChamp("cp-solde", t("Solde d'ouverture","Opening balance"), "number", 0)}
+    <div style="display:flex;gap:9px;margin-top:16px"><button class="btn" onclick="finEnvoie('/finances/compte/creer/',{nom:document.getElementById('cp-nom').value,type:document.getElementById('cp-type').value,devise:document.getElementById('cp-devise').value,solde_initial:document.getElementById('cp-solde').value})">${t("Enregistrer","Save")}</button>
+    <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button></div>`);
+}
+
+function formTaux(){
+  ouvrirModale(t("Taux de change","Exchange rate"), `
+    ${finChamp("tx-valeur", t("1 USD = ? CDF","1 USD = ? CDF"), "number", 2800)}
+    ${finChamp("tx-date", t("Date","Date"), "date", new Date().toISOString().slice(0,10))}
+    <div style="display:flex;gap:9px;margin-top:16px"><button class="btn" onclick="finEnvoie('/finances/taux/creer/',{taux:document.getElementById('tx-valeur').value,date:document.getElementById('tx-date').value})">${t("Enregistrer","Save")}</button>
+    <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button></div>`);
+}
+
+async function formTransfert(id){
+  const d = await api("/finances/comptes/");
+  const autres = (d.success?d.data.comptes:[]).filter(x=>x.id!==id).map(x=>[x.id, x.nom+" ("+x.devise+")"]);
+  ouvrirModale(t("Transfert interne","Internal transfer"), `
+    ${finChamp("tr-dest", t("Vers le compte","To account"), "text", "", autres)}
+    ${finChamp("tr-montant", t("Montant","Amount"), "number", "")}
+    ${finChamp("tr-frais", t("Frais (à part)","Fees (separate)"), "number", 0)}
+    <div style="display:flex;gap:9px;margin-top:16px"><button class="btn" onclick="finEnvoie('/finances/transfert/creer/',{compte_source:${id},compte_destination:document.getElementById('tr-dest').value,montant:document.getElementById('tr-montant').value,frais:document.getElementById('tr-frais').value})">${t("Transférer","Transfer")}</button>
+    <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button></div>`);
+}
+
+function formRapprochement(id){
+  ouvrirModale(t("Rapprochement","Reconciliation"), `
+    ${finChamp("rp-solde", t("Solde du relevé","Statement balance"), "number", "")}
+    <div class="cal-champ"><label>${t("Justification si écart","Reason if gap")}</label><input id="rp-justif"></div>
+    <div style="display:flex;gap:9px;margin-top:16px"><button class="btn" onclick="finEnvoie('/finances/rapprochement/creer/',{compte_id:${id},solde_releve:document.getElementById('rp-solde').value,justification:document.getElementById('rp-justif').value})">${t("Enregistrer","Save")}</button>
+    <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button></div>`);
+}
+
+function formBudget(){
+  ouvrirModale(t("Nouveau budget","New budget"), `
+    <div class="cal-champ"><label>${t("Nom","Name")}</label><input id="bg-nom"></div>
+    ${finChamp("bg-montant", t("Montant","Amount"), "number", "")}
+    ${finChamp("bg-devise", t("Devise","Currency"), "text", "USD", [["USD","USD"],["CDF","CDF"]])}
+    ${finChamp("bg-debut", t("Du","From"), "date", "")}
+    ${finChamp("bg-fin", t("Au","To"), "date", "")}
+    <div style="display:flex;gap:9px;margin-top:16px"><button class="btn" onclick="finEnvoie('/finances/budget/creer/',{nom:document.getElementById('bg-nom').value,montant:document.getElementById('bg-montant').value,devise:document.getElementById('bg-devise').value,date_debut:document.getElementById('bg-debut').value,date_fin:document.getElementById('bg-fin').value})">${t("Enregistrer","Save")}</button>
+    <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button></div>`);
+}
+
+function formProjet(){
+  ouvrirModale(t("Nouveau projet","New project"), `
+    <div class="cal-champ"><label>${t("Nom","Name")}</label><input id="pj-nom"></div>
+    ${finChamp("pj-budget", t("Budget","Budget"), "number", "")}
+    ${finChamp("pj-devise", t("Devise","Currency"), "text", "USD", [["USD","USD"],["CDF","CDF"]])}
+    <div class="cal-champ"><label>${t("Objectif","Goal")}</label><textarea id="pj-objectif" rows="2"></textarea></div>
+    <div style="display:flex;gap:9px;margin-top:16px"><button class="btn" onclick="finEnvoie('/finances/projet/creer/',{nom:document.getElementById('pj-nom').value,budget_montant:document.getElementById('pj-budget').value,devise:document.getElementById('pj-devise').value,objectif:document.getElementById('pj-objectif').value})">${t("Enregistrer","Save")}</button>
+    <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button></div>`);
+}
+
+async function finEnvoie(chemin, corps){
+  const r = await api(chemin, corps);
+  toast(r.success ? t("Enregistré","Saved") : (r.error||"Erreur"), !r.success);
+  if(r.success){ fermeMod(); vueFinances(); }
+}
+
+function finExport(){
+  fetch(API+"/finances/export/",{headers:{"X-Auth-Token":TOKEN}}).then(r=>r.blob()).then(b=>{
+    const url = URL.createObjectURL(b); const a = document.createElement("a");
+    a.href = url; a.download = "finances.csv"; a.click(); URL.revokeObjectURL(url);
+  });
+}
+
 // ─── Calendrier (Phase 3) ───
 let CAL_MOIS = (function(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); })();
 let CAL_DATA = null;
@@ -851,6 +1149,7 @@ async function afficherVue(){
   if(vue==="effectifs") return vueEffectifs();
   if(vue==="groupes") return vueGroupes();
   if(vue==="presences"){ if(!MEMBRES_CACHE.length){ const dm=await api("/membres/?limit=100"); if(dm.success) MEMBRES_CACHE=dm.data.membres; } return vuePresences(); }
+  if(vue==="finances") return vueFinances();
   if(vue==="calendrier") return vueCalendrier();
   if(vue==="utilisateurs"){ const d=await api("/utilisateurs/"); if(d.success) MOI_CACHE=d.data.utilisateurs; return vueUtilisateurs(); }
   if(vue==="roles") return vueRoles();

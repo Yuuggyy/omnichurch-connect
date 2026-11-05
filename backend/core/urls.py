@@ -2,6 +2,7 @@ from django.urls import path
 from . import views_api as v
 from . import views_membres as m
 from . import views_calendrier as cal
+from . import views_finances as fin
 
 urlpatterns = [
     # Auth
@@ -69,6 +70,37 @@ urlpatterns = [
     path("evenement/desinscrire/", cal.evenement_desinscrire),
     path("evenement/participants/", cal.evenement_participants),
     path("evenements/a-venir/", cal.evenements_a_venir),
+    # ── Phase 4 : module financier
+    path("finances/bord/", fin.finances_bord),
+    path("finances/comptes/", fin.comptes_liste),
+    path("finances/compte/creer/", fin.compte_creer),
+    path("finances/compte/modifier/", fin.compte_modifier),
+    path("finances/categorie/creer/", fin.categorie_creer),
+    path("finances/parametres/", fin.parametres_finance),
+    path("finances/taux/", fin.taux_liste),
+    path("finances/taux/creer/", fin.taux_creer),
+    path("finances/mouvements/", fin.mouvements_liste),
+    path("finances/mouvement/creer/", fin.mouvement_creer),
+    path("finances/mouvement/verifier/", fin.mouvement_verifier),
+    path("finances/mouvement/approuver/", fin.mouvement_approuver),
+    path("finances/mouvement/seconde-validation/", fin.mouvement_seconde_validation),
+    path("finances/mouvement/rejeter/", fin.mouvement_rejeter),
+    path("finances/mouvement/payer/", fin.mouvement_payer),
+    path("finances/mouvement/annuler/", fin.mouvement_annuler),
+    path("finances/transferts/", fin.transferts_liste),
+    path("finances/transfert/creer/", fin.transfert_creer),
+    path("finances/budgets/", fin.budgets_liste),
+    path("finances/budget/creer/", fin.budget_creer),
+    path("finances/projets/", fin.projets_liste),
+    path("finances/projet/creer/", fin.projet_creer),
+    path("finances/projet/modifier/", fin.projet_modifier),
+    path("finances/clotures/", fin.clotures_liste),
+    path("finances/cloture/preparer/", fin.cloture_preparer),
+    path("finances/cloture/approuver/", fin.cloture_approuver),
+    path("finances/rapprochements/", fin.rapprochements_liste),
+    path("finances/rapprochement/creer/", fin.rapprochement_creer),
+    path("finances/export/", fin.finances_export),
+    path("finances/rapport-annuel/", fin.finances_rapport_annuel),
     # ── Phase 2 : documents de base
     path("document/fiche/", m.document_fiche),
     path("document/carte/", m.document_carte),

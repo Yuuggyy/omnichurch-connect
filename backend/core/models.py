@@ -340,3 +340,235 @@ class Presence(models.Model):
                                     condition=models.Q(membre__isnull=False),
                                     name="un_pointage_par_membre_et_evenement"),
         ]
+
+# ═══════════════════ Phase 4 : module financier ═══════════════════
+
+DEVISES = [("USD", "Dollar américain"), ("CDF", "Franc congolais")]
+
+TYPES_COMPTE = [("espece", "Espèces"), ("banque", "Compte bancaire"),
+                ("mobile_money", "Mobile Money"), ("autre", "Autre")]
+
+SENS_OPERATION = [("recette", "Recette"), ("depense", "Dépense")]
+
+STATUTS_MOUVEMENT = [("demande", "Demandé"), ("a_verifier", "À vérifier"),
+                     ("approuve", "Approuvé"), ("rejete", "Rejeté"),
+                     ("paye", "Payé"), ("cloture", "Clôturé"), ("annule", "Annulé")]
+
+
+class CompteFinancier(models.Model):
+    """Caisse ou compte de l'Église : espèces, banque, Mobile Money."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="comptes")
+    nom = models.CharField(max_length=120)
+    type = models.CharField(max_length=20, choices=TYPES_COMPTE, default="espece")
+    devise = models.CharField(max_length=3, choices=DEVISES, default="CDF")
+    solde_initial = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    responsable = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="comptes_diriges")
+    actif = models.BooleanField(default=True)
+    observation = models.CharField(max_length=300, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["nom"]
+
+    def solde(self):
+        """Solde initial plus recettes payées moins dépenses payées, transferts compris."""
+        from django.db.models import Sum
+        entrees = Mouvement.objects.filter(compte=self, sens="recette",
+                                           statut__in=["paye", "cloture"]).aggregate(
+            s=Sum("montant"))["s"] or 0
+        sorties = Mouvement.objects.filter(compte=self, sens="depense",
+                                           statut__in=["paye", "cloture"]).aggregate(
+            s=Sum("montant"))["s"] or 0
+        recus = TransfertInterne.objects.filter(compte_destination=self).aggregate(
+            s=Sum("montant_recu"))["s"] or 0
+        emis = TransfertInterne.objects.filter(compte_source=self).aggregate(
+            s=Sum("montant"))["s"] or 0
+        return self.solde_initial + entrees - sorties + recus - emis
+
+
+class CategorieOperation(models.Model):
+    """Catégorie de recette ou de dépense, personnalisable par Église."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="categories_finance")
+    nom = models.CharField(max_length=120)
+    sens = models.CharField(max_length=10, choices=SENS_OPERATION, default="recette")
+    systeme = models.BooleanField(default=False)
+    actif = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sens", "nom"]
+        constraints = [models.UniqueConstraint(fields=["eglise", "nom", "sens"],
+                                               name="unique_categorie_finance")]
+
+
+class TauxChange(models.Model):
+    """Taux historique : jamais recalculé quand le taux courant change."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="taux")
+    devise_source = models.CharField(max_length=3, default="USD")
+    devise_cible = models.CharField(max_length=3, default="CDF")
+    taux = models.DecimalField(max_digits=14, decimal_places=4)
+    date = models.DateField()
+    source = models.CharField(max_length=120, blank=True, default="")
+    saisi_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+
+class Projet(models.Model):
+    STATUTS = [("preparation", "En préparation"), ("en_cours", "En cours"),
+               ("suspendu", "Suspendu"), ("termine", "Terminé"), ("annule", "Annulé")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="projets")
+    nom = models.CharField(max_length=150)
+    objectif = models.TextField(blank=True, default="")
+    budget_montant = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    devise = models.CharField(max_length=3, choices=DEVISES, default="USD")
+    date_debut = models.DateField(null=True, blank=True)
+    date_fin = models.DateField(null=True, blank=True)
+    avancement = models.IntegerField(default=0)
+    statut = models.CharField(max_length=20, choices=STATUTS, default="en_cours")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class Budget(models.Model):
+    """Budget par département, activité ou projet, avec seuils d'alerte configurables."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="budgets")
+    nom = models.CharField(max_length=150)
+    groupe = models.ForeignKey(Groupe, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="budgets")
+    projet = models.ForeignKey(Projet, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="budgets")
+    montant = models.DecimalField(max_digits=16, decimal_places=2)
+    devise = models.CharField(max_length=3, choices=DEVISES, default="USD")
+    date_debut = models.DateField()
+    date_fin = models.DateField()
+    seuils = models.JSONField(default=list, blank=True)
+    bloquer_depassement = models.BooleanField(default=True)
+    actif = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_debut"]
+
+    def consomme(self):
+        from django.db.models import Sum
+        return Mouvement.objects.filter(budget=self, sens="depense", statut__in=[
+            "demande", "a_verifier", "approuve", "paye", "cloture"]).aggregate(
+            s=Sum("montant"))["s"] or 0
+
+    def paye(self):
+        from django.db.models import Sum
+        return Mouvement.objects.filter(budget=self, sens="depense", statut__in=[
+            "paye", "cloture"]).aggregate(s=Sum("montant"))["s"] or 0
+
+
+class Mouvement(models.Model):
+    """Recette ou dépense. Une dépense approuvée n'est pas encore payée."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="mouvements")
+    compte = models.ForeignKey(CompteFinancier, on_delete=models.PROTECT, related_name="mouvements")
+    categorie = models.ForeignKey(CategorieOperation, null=True, blank=True,
+                                  on_delete=models.SET_NULL, related_name="mouvements")
+    sens = models.CharField(max_length=10, choices=SENS_OPERATION, default="recette")
+    montant = models.DecimalField(max_digits=16, decimal_places=2)
+    devise = models.CharField(max_length=3, choices=DEVISES, default="CDF")
+    montant_converti = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True,
+                                           help_text="Contre-valeur dans la devise de référence")
+    taux = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    date = models.DateField()
+    libelle = models.CharField(max_length=250)
+    membre = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="mouvements")
+    donateur_nom = models.CharField(max_length=150, blank=True, default="")
+    anonyme = models.BooleanField(default=False)
+    collecte_globale = models.BooleanField(default=False)
+    justificatif_url = models.CharField(max_length=500, blank=True, default="")
+    justification = models.CharField(max_length=400, blank=True, default="")
+    statut = models.CharField(max_length=20, choices=STATUTS_MOUVEMENT, default="demande")
+    reference_recu = models.CharField(max_length=40, blank=True, default="")
+    projet = models.ForeignKey(Projet, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="mouvements")
+    budget = models.ForeignKey(Budget, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="mouvements")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="mouvements_crees")
+    verifie_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="mouvements_verifies")
+    approuve_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name="mouvements_approuves")
+    seconde_validation_par = models.ForeignKey(Utilisateur, null=True, blank=True,
+                                               on_delete=models.SET_NULL,
+                                               related_name="mouvements_double_valides")
+    paye_le = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+
+class TransfertInterne(models.Model):
+    """Transfert entre deux comptes : ni recette ni dépense, frais enregistrés à part."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="transferts")
+    compte_source = models.ForeignKey(CompteFinancier, on_delete=models.PROTECT,
+                                      related_name="transferts_emis")
+    compte_destination = models.ForeignKey(CompteFinancier, on_delete=models.PROTECT,
+                                           related_name="transferts_recus")
+    montant = models.DecimalField(max_digits=16, decimal_places=2)
+    devise = models.CharField(max_length=3, choices=DEVISES, default="CDF")
+    montant_recu = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    frais = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    date = models.DateField()
+    libelle = models.CharField(max_length=250, blank=True, default="")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CloturePeriode(models.Model):
+    """Clôture mensuelle : préparation puis approbation par une autre personne."""
+    STATUTS = [("prepare", "Préparée"), ("approuve", "Approuvée")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="clotures")
+    periode = models.CharField(max_length=7)  # AAAA-MM
+    statut = models.CharField(max_length=20, choices=STATUTS, default="prepare")
+    total_recettes = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    total_depenses = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    ecart = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    justification = models.CharField(max_length=500, blank=True, default="")
+    prepare_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="clotures_preparees")
+    approuve_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name="clotures_approuvees")
+    verrouille = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-periode"]
+        constraints = [models.UniqueConstraint(fields=["eglise", "periode"],
+                                               name="unique_cloture_periode")]
+
+
+class Rapprochement(models.Model):
+    """Rapprochement de caisse, de banque ou de Mobile Money avec le relevé."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="rapprochements")
+    compte = models.ForeignKey(CompteFinancier, on_delete=models.CASCADE, related_name="rapprochements")
+    date = models.DateField()
+    solde_releve = models.DecimalField(max_digits=16, decimal_places=2)
+    solde_calcule = models.DecimalField(max_digits=16, decimal_places=2)
+    ecart = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    justification = models.CharField(max_length=500, blank=True, default="")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class ParametreFinance(models.Model):
+    """Seuils de validation configurables par Église (section 10.3)."""
+    eglise = models.OneToOneField(Eglise, on_delete=models.CASCADE, related_name="finance_param")
+    devise_reference = models.CharField(max_length=3, default="USD")
+    seuil_verification = models.DecimalField(max_digits=16, decimal_places=2, default=100)
+    seuil_double_validation = models.DecimalField(max_digits=16, decimal_places=2, default=500)
+    justificatif_obligatoire = models.BooleanField(default=True)
+    prefixe_recu = models.CharField(max_length=12, default="REC")
+    compteur_recu = models.IntegerField(default=0)
