@@ -58,6 +58,13 @@ def _decimal(v, defaut=None):
         return defaut
 
 
+def _n(valeur):
+    """Montant arrondi à deux décimales, sans bruit de virgule flottante."""
+    if valeur is None:
+        return "0.00"
+    return str(Decimal(str(valeur)).quantize(Decimal("0.01")))
+
+
 def _parametres(e):
     p, _ = ParametreFinance.objects.get_or_create(eglise=e)
     return p
@@ -102,8 +109,8 @@ def _numero_recu(e):
 
 def _json_mouvement(m):
     return {
-        "id": m.id, "sens": m.sens, "montant": str(m.montant), "devise": m.devise,
-        "montant_converti": str(m.montant_converti) if m.montant_converti is not None else None,
+        "id": m.id, "sens": m.sens, "montant": _n(m.montant), "devise": m.devise,
+        "montant_converti": _n(m.montant_converti) if m.montant_converti is not None else None,
         "date": m.date.isoformat(), "libelle": m.libelle, "statut": m.statut,
         "compte": m.compte.nom, "compte_id": m.compte_id,
         "categorie": m.categorie.nom if m.categorie_id else "",
@@ -126,7 +133,7 @@ def comptes_liste(request):
     comptes = []
     for c in CompteFinancier.objects.filter(eglise=e).select_related("responsable"):
         comptes.append({"id": c.id, "nom": c.nom, "type": c.type, "devise": c.devise,
-                        "solde": str(c.solde()), "actif": c.actif,
+                        "solde": _n(c.solde()), "actif": c.actif,
                         "responsable": c.responsable.nom_complet if c.responsable_id else ""})
     p = _parametres(e)
     return ok({"comptes": comptes,
@@ -156,7 +163,7 @@ def compte_creer(request):
         responsable_id=d.get("responsable_id") or None,
         observation=(d.get("observation") or "")[:300])
     tracer(request.utilisateur, "finances", "creer", f"Compte créé : {compte.nom} ({compte.devise})")
-    return ok({"compte": {"id": compte.id, "nom": compte.nom, "solde": str(compte.solde())}})
+    return ok({"compte": {"id": compte.id, "nom": compte.nom, "solde": _n(compte.solde())}})
 
 
 @auth_requise()
@@ -175,7 +182,7 @@ def compte_modifier(request):
         compte.observation = (d["observation"] or "")[:300]
     compte.save()
     tracer(request.utilisateur, "finances", "modifier", f"Compte modifié : {compte.nom}")
-    return ok({"compte": {"id": compte.id, "nom": compte.nom, "solde": str(compte.solde())}})
+    return ok({"compte": {"id": compte.id, "nom": compte.nom, "solde": _n(compte.solde())}})
 
 
 @auth_requise()
@@ -278,8 +285,8 @@ def mouvements_liste(request):
     for sens in ("recette", "depense"):
         agg = qs.filter(sens=sens)
         totaux[sens] = {
-            "total": str(agg.aggregate(s=Sum("montant"))["s"] or 0),
-            "paye": str(agg.filter(statut__in=["paye", "cloture"]).aggregate(
+            "total": _n(agg.aggregate(s=Sum("montant"))["s"] or 0),
+            "paye": _n(agg.filter(statut__in=["paye", "cloture"]).aggregate(
                 s=Sum("montant"))["s"] or 0),
             "en_attente": agg.filter(statut__in=["demande", "a_verifier", "approuve"]).count(),
         }
@@ -458,7 +465,7 @@ def mouvement_payer(request):
         m.reference_recu = _numero_recu(e)
     m.save()
     tracer(request.utilisateur, "finances", "valider", f"Paiement enregistré : {m.libelle}")
-    return ok({"mouvement": _json_mouvement(m), "solde_compte": str(m.compte.solde())})
+    return ok({"mouvement": _json_mouvement(m), "solde_compte": _n(m.compte.solde())})
 
 
 @auth_requise()
@@ -506,7 +513,7 @@ def transfert_creer(request):
         libelle=(d.get("libelle") or "")[:250], cree_par=request.utilisateur)
     tracer(request.utilisateur, "finances", "creer",
            f"Transfert {t.montant} {t.devise} de {src.nom} vers {dst.nom}")
-    return ok({"transfert": {"id": t.id, "montant": str(t.montant), "recu": str(t.montant_recu)}})
+    return ok({"transfert": {"id": t.id, "montant": _n(t.montant), "recu": _n(t.montant_recu)}})
 
 
 @auth_requise()
@@ -514,8 +521,8 @@ def transfert_creer(request):
 def transferts_liste(request):
     e = _eglise(request)
     lignes = [{"id": t.id, "source": t.compte_source.nom, "destination": t.compte_destination.nom,
-               "montant": str(t.montant), "devise": t.devise, "recu": str(t.montant_recu),
-               "frais": str(t.frais), "date": t.date.isoformat(), "libelle": t.libelle}
+               "montant": _n(t.montant), "devise": t.devise, "recu": _n(t.montant_recu),
+               "frais": _n(t.frais), "date": t.date.isoformat(), "libelle": t.libelle}
               for t in TransfertInterne.objects.filter(eglise=e).select_related(
                   "compte_source", "compte_destination")[:200]]
     return ok({"transferts": lignes})
@@ -536,9 +543,9 @@ def budgets_liste(request):
         taux = float((engage / b.montant) * 100) if b.montant else 0
         alertes = [s for s in seuils if taux >= s]
         lignes.append({
-            "id": b.id, "nom": b.nom, "montant": str(b.montant), "devise": b.devise,
-            "engage": str(engage), "paye": str(paye),
-            "restant": str(b.montant - engage), "consommation": round(taux, 1),
+            "id": b.id, "nom": b.nom, "montant": _n(b.montant), "devise": b.devise,
+            "engage": _n(engage), "paye": _n(paye),
+            "restant": _n(b.montant - engage), "consommation": round(taux, 1),
             "alertes": alertes, "blocage": b.bloquer_depassement,
             "groupe": b.groupe.nom if b.groupe_id else "",
             "projet": b.projet.nom if b.projet_id else "",
@@ -568,7 +575,7 @@ def budget_creer(request):
         seuils=d.get("seuils") or [75, 90, 100],
         bloquer_depassement=bool(d.get("bloquer_depassement", True)))
     tracer(request.utilisateur, "finances", "creer", f"Budget créé : {b.nom} ({b.montant} {b.devise})")
-    return ok({"budget": {"id": b.id, "nom": b.nom, "montant": str(b.montant)}})
+    return ok({"budget": {"id": b.id, "nom": b.nom, "montant": _n(b.montant)}})
 
 
 # ─────────────────────────── projets ───────────────────────────
@@ -589,8 +596,8 @@ def projets_liste(request):
         promis = pr.budget_montant
         lignes.append({"id": pr.id, "nom": pr.nom, "objectif": pr.objectif,
                        "budget": str(promis), "devise": pr.devise,
-                       "recu": str(recettes), "depense": str(depenses),
-                       "solde": str(recettes - depenses), "engage": str(engage),
+                       "recu": _n(recettes), "depense": _n(depenses),
+                       "solde": _n(recettes - depenses), "engage": _n(engage),
                        "avancement": pr.avancement,
                        "statut": pr.statut,
                        "financement": round(float(recettes / promis) * 100, 1) if promis else 0})
@@ -662,8 +669,8 @@ def cloture_preparer(request):
                   "ecart": ecart, "justification": (d.get("justification") or "")[:500],
                   "prepare_par": request.utilisateur, "verrouille": False})
     tracer(request.utilisateur, "finances", "valider", f"Clôture préparée : {periode}")
-    return ok({"cloture": {"id": cl.id, "periode": cl.periode, "recettes": str(cl.total_recettes),
-                           "depenses": str(cl.total_depenses), "ecart": str(cl.ecart),
+    return ok({"cloture": {"id": cl.id, "periode": cl.periode, "recettes": _n(cl.total_recettes),
+                           "depenses": _n(cl.total_depenses), "ecart": _n(cl.ecart),
                            "statut": cl.statut}})
 
 
@@ -708,8 +715,8 @@ def cloture_approuver(request):
 def clotures_liste(request):
     e = _eglise(request)
     return ok({"clotures": [{"id": c.id, "periode": c.periode, "statut": c.statut,
-                             "recettes": str(c.total_recettes), "depenses": str(c.total_depenses),
-                             "ecart": str(c.ecart), "verrouille": c.verrouille,
+                             "recettes": _n(c.total_recettes), "depenses": _n(c.total_depenses),
+                             "ecart": _n(c.ecart), "verrouille": c.verrouille,
                              "prepare_par": c.prepare_par.nom_complet if c.prepare_par_id else "",
                              "approuve_par": c.approuve_par.nom_complet if c.approuve_par_id else ""}
                             for c in CloturePeriode.objects.filter(eglise=e)]})
@@ -736,7 +743,7 @@ def rapprochement_creer(request):
         justification=(d.get("justification") or "")[:500], cree_par=request.utilisateur)
     tracer(request.utilisateur, "finances", "valider",
            f"Rapprochement {compte.nom} : écart {ecart}")
-    return ok({"rapprochement": {"id": r.id, "ecart": str(r.ecart), "calcule": str(calcule)}})
+    return ok({"rapprochement": {"id": r.id, "ecart": _n(r.ecart), "calcule": _n(calcule)}})
 
 
 @auth_requise()
@@ -744,8 +751,8 @@ def rapprochement_creer(request):
 def rapprochements_liste(request):
     e = _eglise(request)
     return ok({"rapprochements": [{"id": r.id, "compte": r.compte.nom, "date": r.date.isoformat(),
-                                   "releve": str(r.solde_releve), "calcule": str(r.solde_calcule),
-                                   "ecart": str(r.ecart), "justification": r.justification}
+                                   "releve": _n(r.solde_releve), "calcule": _n(r.solde_calcule),
+                                   "ecart": _n(r.ecart), "justification": r.justification}
                                   for r in Rapprochement.objects.filter(eglise=e).select_related(
                                       "compte")[:100]]})
 
@@ -768,7 +775,7 @@ def finances_bord(request):
             qs = qs.filter(date__lt=jusqu)
         return qs.aggregate(s=Sum("montant_converti"))["s"] or 0
 
-    soldes = [{"compte": c.nom, "devise": c.devise, "solde": str(c.solde())}
+    soldes = [{"compte": c.nom, "devise": c.devise, "solde": _n(c.solde())}
               for c in CompteFinancier.objects.filter(eglise=e, actif=True)]
     par_categorie = []
     for cat in CategorieOperation.objects.filter(eglise=e, actif=True):
@@ -776,19 +783,21 @@ def finances_bord(request):
                                      statut__in=["paye", "cloture"]).aggregate(
             s=Sum("montant_converti"))["s"] or 0
         if s:
-            par_categorie.append({"categorie": cat.nom, "sens": cat.sens, "total": str(s)})
+            par_categorie.append({"categorie": cat.nom, "sens": cat.sens, "total": _n(s)})
     return ok({
         "mois": aujourdhui.strftime("%Y-%m"),
-        "recettes_mois": str(total("recette", debut_mois)),
-        "depenses_mois": str(total("depense", debut_mois)),
-        "recettes_annee": str(total("recette", date(aujourdhui.year, 1, 1))),
-        "depenses_annee": str(total("depense", date(aujourdhui.year, 1, 1))),
+        "recettes_mois": _n(total("recette", debut_mois)),
+        "depenses_mois": _n(total("depense", debut_mois)),
+        "recettes_annee": _n(total("recette", date(aujourdhui.year, 1, 1))),
+        "depenses_annee": _n(total("depense", date(aujourdhui.year, 1, 1))),
         "a_valider": Mouvement.objects.filter(eglise=e, statut__in=[
             "demande", "a_verifier"], sens="depense").count(),
         "sans_justificatif": Mouvement.objects.filter(eglise=e, sens="depense",
                                                       justificatif_url="").exclude(
             statut__in=["annule", "rejete"]).count(),
         "soldes": soldes, "par_categorie": par_categorie,
+        "dernieres": [_json_mouvement(m) for m in Mouvement.objects.filter(eglise=e).select_related(
+            "compte", "categorie", "membre", "projet", "budget", "approuve_par")[:8]],
         "devise_reference": p.devise_reference,
     })
 
@@ -841,14 +850,14 @@ def finances_rapport_annuel(request):
             s=Sum("montant_converti"))["s"] or 0
         cumul_r += r
         cumul_d += d_
-        mois.append({"mois": f"{annee}-{n:02d}", "recettes": str(r), "depenses": str(d_),
-                     "solde": str(r - d_)})
-    budgets = [{"nom": b.nom, "montant": str(b.montant), "engage": str(b.consomme()),
-                "paye": str(b.paye()), "restant": str(b.montant - b.consomme())}
+        mois.append({"mois": f"{annee}-{n:02d}", "recettes": _n(r), "depenses": _n(d_),
+                     "solde": _n(r - d_)})
+    budgets = [{"nom": b.nom, "montant": _n(b.montant), "engage": _n(b.consomme()),
+                "paye": _n(b.paye()), "restant": _n(b.montant - b.consomme())}
                for b in Budget.objects.filter(eglise=e, date_debut__year=annee)]
     return ok({"annee": annee, "mois": mois,
-               "total_recettes": str(cumul_r), "total_depenses": str(cumul_d),
-               "solde_annuel": str(cumul_r - cumul_d), "budgets": budgets,
+               "total_recettes": _n(cumul_r), "total_depenses": _n(cumul_d),
+               "solde_annuel": _n(cumul_r - cumul_d), "budgets": budgets,
                "devise_reference": _parametres(e).devise_reference,
                "justificatifs_manquants": Mouvement.objects.filter(
                    eglise=e, sens="depense", justificatif_url="", date__year=annee).exclude(
