@@ -3,6 +3,7 @@ from . import views_api as v
 from . import views_membres as m
 from . import views_calendrier as cal
 from . import views_finances as fin
+from . import views_patrimoine as pat
 
 urlpatterns = [
     # Auth
@@ -101,6 +102,14 @@ urlpatterns = [
     path("finances/rapprochement/creer/", fin.rapprochement_creer),
     path("finances/export/", fin.finances_export),
     path("finances/rapport-annuel/", fin.finances_rapport_annuel),
+    # ── Phase 5 : patrimoine
+    path("patrimoine/", pat.biens_liste),
+    path("patrimoine/bien/", pat.bien_detail),
+    path("patrimoine/bien/creer/", pat.bien_creer),
+    path("patrimoine/bien/modifier/", pat.bien_modifier),
+    path("patrimoine/bien/mouvement/", pat.bien_mouvement),
+    path("patrimoine/alertes/", pat.biens_alertes),
+    path("patrimoine/export/", pat.biens_export),
     # ── Phase 2 : documents de base
     path("document/fiche/", m.document_fiche),
     path("document/carte/", m.document_carte),

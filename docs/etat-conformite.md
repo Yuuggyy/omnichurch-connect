@@ -133,6 +133,11 @@ Budgets par département, activité ou projet, avec consommation, engagé, payé
 Clôture mensuelle en deux temps (préparation puis approbation par une autre personne), verrouillage de la période et passage des opérations payées en « clôturé ». Rapprochements de caisse, de banque et de Mobile Money avec écart obligatoirement justifié. Rapport annuel mois par mois, export CSV, tableau de bord des soldes.
 Vérification : 60 tests automatisés, tous réussis. Déployé et testé en ligne le 5 novembre 2026 (taux 2850 CDF/USD, recette de 250 000 CDF convertie à 87,72 USD, reçu REC-2026-00001, dépense approuvée puis payée, solde recalculé).
 
+## 18. Patrimoine et équipements — FAIT (Phase 5)
+Inventaire des biens durables : terrains, bâtiments, véhicules, mobilier, informatique, instruments, électroménager. Chaque bien porte un code unique par Église, une catégorie, une quantité, une date et un prix d'acquisition, une devise, un emplacement, un responsable membre, un état et un justificatif.
+Journal de vie du bien : acquisition, affectation, prêt, retour, entretien, réparation, réforme, constat d'inventaire, avec personne, lieu, coût et note. Une réparation remet le bien en bon état, une réforme le verrouille définitivement. Alertes permanentes sur les biens à réparer, hors service, sans justificatif ou sans responsable, plus le coût d'entretien de l'année. Valeur totale calculée par devise et export CSV de l'inventaire.
+Vérification : 34 tests automatisés, tous réussis, dont l'isolation entre Églises et les permissions en lecture seule. Déployé et testé en ligne le 5 novembre 2026.
+
 ## 13. Calendrier et événements — FAIT (Phase 3)
 Calendrier mensuel réel dans l'admin, navigation d'un mois à l'autre, jour courant repéré. Un événement porte un titre, un type, une date de début et de fin, une heure de début et de fin, une durée calculée, un lieu, une description, un public cible, une capacité, un statut (planifié, confirmé, annulé, terminé), une récurrence (aucune, hebdomadaire, mensuelle, annuelle) et un délai de rappel.
 Récurrences projetées à la volée, sans dupliquer de fiche. Inscriptions nominatives des membres avec contrôle de capacité, désinscription sans perte d'historique. Export iCalendar (.ics) d'un événement ou du mois, export CSV du mois, agenda des prochains jours.

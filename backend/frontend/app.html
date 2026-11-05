@@ -150,6 +150,7 @@ function construireNav(){
   if(perm("membres","consulter")) items.push(["membres","✦","Membres","Members"]);
   if(perm("membres","consulter")) items.push(["effectifs","Σ","Effectifs","Headcount"]);
   if(perm("groupes","consulter")) items.push(["groupes","⌘","Groupes","Groups"]);
+  if(perm("patrimoine","consulter")) items.push(["patrimoine","⛁","Patrimoine","Assets"]);
   if(perm("finances","consulter")) items.push(["finances","₣","Finances","Finance"]);
   if(perm("evenements","consulter")) items.push(["calendrier","▦","Calendrier","Calendar"]);
   if(perm("presences","consulter")) items.push(["presences","✓","Présences","Attendance"]);
@@ -691,6 +692,115 @@ async function supprimerPresence(id){
   if(d.success){ toast("✓"); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
 }
 
+// ─── Patrimoine (Phase 5) ───
+const ETATS_PAT = {neuf:"Neuf",bon:"Bon état",usage:"Usagé",a_reparer:"À réparer",hors_service:"Hors service",reforme:"Réformé"};
+
+async function vuePatrimoine(){
+  const d = await api("/patrimoine/");
+  if(!d.success){ main.innerHTML = `<div class="panel">${d.error||"Erreur"}</div>`; return; }
+  const x = d.data;
+  const lignes = x.biens.map(b=>`<tr>
+    <td>${b.code||"—"}</td>
+    <td><b>${b.nom}</b><br><span class="muted" style="font-size:11px">${b.categorie_libelle}${b.responsable?" · "+b.responsable:""}</span></td>
+    <td>${b.quantite}</td>
+    <td>${b.localisation||"—"}</td>
+    <td>${b.valeur_totale} ${b.devise}</td>
+    <td><span class="pill ${b.etat==="bon"||b.etat==="neuf"?"okk":(b.etat==="a_reparer"||b.etat==="hors_service"?"bad":"")}">${ETATS_PAT[b.etat]||b.etat}</span></td>
+    <td style="white-space:nowrap">
+      ${perm("patrimoine","modifier")?`<button class="act" onclick="formMouvementBien(${b.id})">${t("Mouvement","Movement")}</button>`:""}
+      ${perm("patrimoine","modifier")?`<button class="act" onclick="formBien(${b.id})">✎</button>`:""}
+    </td></tr>`).join("");
+  main.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:27px;color:var(--gold2);margin-right:auto">${t("Patrimoine & équipements","Assets & equipment")}</h2>
+      ${perm("patrimoine","exporter")?`<button class="btn ghost" onclick="patExport()">CSV</button>`:""}
+      ${perm("patrimoine","creer")?`<button class="btn" onclick="formBien()">+ ${t("Bien","Asset")}</button>`:""}
+    </div>
+    <div class="fin-kpi">
+      <div class="k"><b>${x.nombre}</b><span>${t("Biens enregistrés","Registered assets")}</span></div>
+      <div class="k"><b>${x.totaux.USD}</b><span>${t("Valeur en USD","Value in USD")}</span></div>
+      <div class="k"><b>${x.totaux.CDF}</b><span>${t("Valeur en CDF","Value in CDF")}</span></div>
+      <div class="k"><b>${x.alertes.a_reparer}</b><span>${t("À réparer","To repair")}</span></div>
+      <div class="k"><b>${x.alertes.hors_service}</b><span>${t("Hors service","Out of service")}</span></div>
+      <div class="k"><b>${x.alertes.sans_justificatif}</b><span>${t("Sans justificatif","No receipt")}</span></div>
+    </div>
+    <div class="fin-tab"><table><thead><tr>
+      <th>${t("Code","Code")}</th><th>${t("Bien","Asset")}</th><th>${t("Qté","Qty")}</th>
+      <th>${t("Emplacement","Location")}</th><th>${t("Valeur","Value")}</th><th>${t("État","State")}</th><th></th>
+    </tr></thead><tbody>${lignes||`<tr><td colspan="7" class="muted">${t("Aucun bien enregistré.","No asset yet.")}</td></tr>`}</tbody></table></div>`;
+}
+
+async function formBien(id){
+  let b = null;
+  if(id){ const d = await api("/patrimoine/bien/?id="+id); if(d.success) b = d.data.bien; }
+  const cats = [["terrain","Terrain"],["batiment","Bâtiment"],["vehicule","Véhicule"],["mobilier","Mobilier"],["informatique","Informatique et son"],["instrument","Instrument"],["electromenager","Électroménager"],["autre","Autre"]];
+  const etats = Object.entries(ETATS_PAT);
+  ouvrirModale(b ? t("Modifier le bien","Edit asset") : t("Nouveau bien","New asset"), `
+    <div class="cal-champ"><label>${t("Nom","Name")} *</label><input id="bt-nom" value="${b?b.nom:""}"></div>
+    <div class="cal-deux">
+      <div class="cal-champ"><label>${t("Code","Code")}</label><input id="bt-code" value="${b?b.code:""}"></div>
+      <div class="cal-champ"><label>${t("Catégorie","Category")}</label><select id="bt-cat">${cats.map(([v,l])=>`<option value="${v}"${b&&b.categorie===v?" selected":""}>${l}</option>`).join("")}</select></div>
+    </div>
+    <div class="cal-deux">
+      <div class="cal-champ"><label>${t("Quantité","Quantity")}</label><input type="number" min="1" id="bt-qte" value="${b?b.quantite:1}"></div>
+      <div class="cal-champ"><label>${t("État","State")}</label><select id="bt-etat">${etats.map(([v,l])=>`<option value="${v}"${b&&b.etat===v?" selected":""}>${l}</option>`).join("")}</select></div>
+    </div>
+    <div class="cal-deux">
+      <div class="cal-champ"><label>${t("Valeur unitaire","Unit value")}</label><input type="number" id="bt-valeur" value="${b?b.valeur_achat:""}"></div>
+      <div class="cal-champ"><label>${t("Devise","Currency")}</label><select id="bt-devise"><option value="USD"${b&&b.devise==="USD"?" selected":""}>USD</option><option value="CDF"${b&&b.devise==="CDF"?" selected":""}>CDF</option></select></div>
+    </div>
+    <div class="cal-champ"><label>${t("Emplacement","Location")}</label><input id="bt-lieu" value="${b?b.localisation:""}"></div>
+    <div class="cal-champ"><label>${t("Justificatif (lien)","Receipt (link)")}</label><input id="bt-justif" value="${b&&b.justificatif?"":""}"></div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      <button class="btn" onclick="enregistreBien(${id||0})">${t("Enregistrer","Save")}</button>
+      <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button>
+    </div>`);
+}
+
+async function enregistreBien(id){
+  const v = k => { const e = document.getElementById(k); return e ? e.value : ""; };
+  const corps = {nom:v("bt-nom"), code:v("bt-code"), categorie:v("bt-cat"), quantite:v("bt-qte"),
+    etat:v("bt-etat"), valeur_achat:v("bt-valeur"), devise:v("bt-devise"),
+    localisation:v("bt-lieu"), justificatif_url:v("bt-justif")};
+  if(id) corps.id = id;
+  const r = await api(id?"/patrimoine/bien/modifier/":"/patrimoine/bien/creer/", corps);
+  toast(r.success ? t("Bien enregistré","Asset saved") : (r.error||"Erreur"), !r.success);
+  if(r.success){ fermeMod(); vuePatrimoine(); }
+}
+
+function formMouvementBien(id){
+  ouvrirModale(t("Mouvement du bien","Asset movement"), `
+    <div class="cal-champ"><label>${t("Type","Type")}</label><select id="mv-type">
+      ${[["affectation","Affectation"],["pret","Prêt"],["retour","Retour"],["entretien","Entretien"],["reparation","Réparation"],["reforme","Réforme"],["inventaire","Constat d'inventaire"]].map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}
+    </select></div>
+    <div class="cal-deux">
+      <div class="cal-champ"><label>${t("Date","Date")}</label><input type="date" id="mv-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="cal-champ"><label>${t("Coût (facultatif)","Cost (optional)")}</label><input type="number" id="mv-cout"></div>
+    </div>
+    <div class="cal-champ"><label>${t("Personne ou service","Person or department")}</label><input id="mv-personne"></div>
+    <div class="cal-champ"><label>${t("Lieu","Location")}</label><input id="mv-lieu"></div>
+    <div class="cal-champ"><label>${t("Note","Note")}</label><input id="mv-note"></div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      <button class="btn" onclick="enregistreMouvementBien(${id})">${t("Enregistrer","Save")}</button>
+      <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button>
+    </div>`);
+}
+
+async function enregistreMouvementBien(id){
+  const v = k => { const e = document.getElementById(k); return e ? e.value : ""; };
+  const r = await api("/patrimoine/bien/mouvement/", {bien_id:id, type:v("mv-type"),
+    date:v("mv-date"), cout:v("mv-cout"), personne:v("mv-personne"), lieu:v("mv-lieu"), note:v("mv-note")});
+  toast(r.success ? t("Mouvement enregistré","Movement saved") : (r.error||"Erreur"), !r.success);
+  if(r.success){ fermeMod(); vuePatrimoine(); }
+}
+
+function patExport(){
+  fetch(API+"/patrimoine/export/",{headers:{"X-Auth-Token":TOKEN}}).then(r=>r.blob()).then(b=>{
+    const url = URL.createObjectURL(b); const a = document.createElement("a");
+    a.href = url; a.download = "inventaire-patrimoine.csv"; a.click(); URL.revokeObjectURL(url);
+  });
+}
+
 // ─── Finances (Phase 4) ───
 let FIN_ONGLET = "bord";
 let FIN_DONNEES = {bord:null, comptes:null, mouvements:null, budgets:null, projets:null, clôtures:null};
@@ -1155,6 +1265,7 @@ async function afficherVue(){
   if(vue==="effectifs") return vueEffectifs();
   if(vue==="groupes") return vueGroupes();
   if(vue==="presences"){ if(!MEMBRES_CACHE.length){ const dm=await api("/membres/?limit=100"); if(dm.success) MEMBRES_CACHE=dm.data.membres; } return vuePresences(); }
+  if(vue==="patrimoine") return vuePatrimoine();
   if(vue==="finances") return vueFinances();
   if(vue==="calendrier") return vueCalendrier();
   if(vue==="utilisateurs"){ const d=await api("/utilisateurs/"); if(d.success) MOI_CACHE=d.data.utilisateurs; return vueUtilisateurs(); }

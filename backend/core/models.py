@@ -572,3 +572,70 @@ class ParametreFinance(models.Model):
     justificatif_obligatoire = models.BooleanField(default=True)
     prefixe_recu = models.CharField(max_length=12, default="REC")
     compteur_recu = models.IntegerField(default=0)
+
+# ═══════════════════ Phase 5 : patrimoine et équipements ═══════════════════
+
+ETATS_BIEN = [("neuf", "Neuf"), ("bon", "Bon état"), ("usage", "Usagé"),
+              ("a_reparer", "À réparer"), ("hors_service", "Hors service"), ("reforme", "Réformé")]
+
+CATEGORIES_BIEN = [("terrain", "Terrain"), ("batiment", "Bâtiment"), ("vehicule", "Véhicule"),
+                   ("mobilier", "Mobilier"), ("informatique", "Informatique et son"),
+                   ("instrument", "Instrument de musique"), ("electromenager", "Électroménager"),
+                   ("autre", "Autre")]
+
+TYPES_MOUVEMENT_BIEN = [("acquisition", "Acquisition"), ("affectation", "Affectation"),
+                        ("retour", "Retour"), ("pret", "Prêt"), ("entretien", "Entretien"),
+                        ("reparation", "Réparation"), ("reforme", "Réforme"),
+                        ("inventaire", "Constat d'inventaire")]
+
+
+class BienPatrimoine(models.Model):
+    """Bien durable de l'Église : terrain, bâtiment, véhicule, mobilier, matériel."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="biens")
+    code = models.CharField(max_length=40, blank=True, default="")
+    nom = models.CharField(max_length=200)
+    categorie = models.CharField(max_length=20, choices=CATEGORIES_BIEN, default="mobilier")
+    description = models.TextField(blank=True, default="")
+    quantite = models.IntegerField(default=1)
+    date_acquisition = models.DateField(null=True, blank=True)
+    valeur_achat = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    devise = models.CharField(max_length=3, choices=DEVISES, default="USD")
+    localisation = models.CharField(max_length=200, blank=True, default="")
+    responsable = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="biens_sous_responsabilite")
+    etat = models.CharField(max_length=20, choices=ETATS_BIEN, default="bon")
+    groupe = models.ForeignKey(Groupe, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="biens")
+    justificatif_url = models.CharField(max_length=500, blank=True, default="")
+    observation = models.CharField(max_length=400, blank=True, default="")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["categorie", "nom"]
+        constraints = [models.UniqueConstraint(fields=["eglise", "code"],
+                                               condition=~models.Q(code=""),
+                                               name="unique_code_bien_eglise")]
+
+    def valeur_totale(self):
+        return self.valeur_achat * max(self.quantite or 1, 1)
+
+
+class MouvementBien(models.Model):
+    """Journal d'un bien : affectation, prêt, entretien, réparation, réforme, inventaire."""
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="mouvements_biens")
+    bien = models.ForeignKey(BienPatrimoine, on_delete=models.CASCADE, related_name="mouvements")
+    type = models.CharField(max_length=20, choices=TYPES_MOUVEMENT_BIEN, default="affectation")
+    date = models.DateField()
+    personne = models.CharField(max_length=150, blank=True, default="")
+    membre = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="mouvements_biens")
+    lieu = models.CharField(max_length=200, blank=True, default="")
+    cout = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    note = models.CharField(max_length=400, blank=True, default="")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
