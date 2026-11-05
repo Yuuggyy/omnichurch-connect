@@ -153,6 +153,7 @@ function construireNav(){
   if(perm("patrimoine","consulter")) items.push(["patrimoine","⛁","Patrimoine","Assets"]);
   if(perm("finances","consulter")) items.push(["finances","₣","Finances","Finance"]);
   if(perm("evenements","consulter")) items.push(["calendrier","▦","Calendrier","Calendar"]);
+  if(perm("pastoral","consulter")) items.push(["pastoral","✝","Suivi pastoral","Pastoral care"]);
   if(perm("presences","consulter")) items.push(["presences","✓","Présences","Attendance"]);
   if(perm("utilisateurs","consulter")) items.push(["utilisateurs","👥","Utilisateurs","Users"]);
   if(perm("utilisateurs","consulter")) items.push(["roles","⚖","Rôles & permissions","Roles & permissions"]);
@@ -1087,6 +1088,9 @@ function finExport(){
   });
 }
 
+// lecture d'un champ de formulaire
+function v(id){ const e = document.getElementById(id); return e ? e.value : ""; }
+
 // ─── Calendrier (Phase 3) ───
 let CAL_MOIS = (function(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); })();
 let CAL_DATA = null;
@@ -1258,12 +1262,167 @@ async function inscris(evId){
   if(d.success){ fermeMod(); vueCalendrier(); }
 }
 
+
+// ─── Suivi pastoral (section 16) ───
+let PAS_DOSSIERS = [], PAS_ETAT = {type:"",statut:""};
+
+async function vuePastoral(){
+  main.innerHTML = `<div class="kicker">${t("SUIVI PASTORAL","PASTORAL CARE")}</div>
+    <h1>${t("Accompagnement","Care & follow-up")}</h1>
+    <div class="cards" id="pas-kpis"></div>
+    <div style="margin:22px 0 8px;display:flex;gap:10px;flex-wrap:wrap">
+      ${perm("pastoral","creer")?`<button class="btn" onclick="formDossier()">+ ${t("Dossier","Case")}</button>`:""}
+      ${perm("pastoral","creer")?`<button class="btn ghost" onclick="formPriere()">+ ${t("Demande de prière","Prayer request")}</button>`:""}
+      <button class="btn ghost" onclick="voirPrieres()">${t("Prières","Prayer wall")}</button>
+      ${perm("pastoral","exporter")?`<button class="btn ghost" onclick="telecharge('/pastoral/export/','suivi-pastoral.csv')">CSV</button>`:""}
+    </div>
+    <div class="panel" style="max-width:none" id="pas-liste"></div>`;
+  await rafraichirPastoral();
+}
+
+async function rafraichirPastoral(){
+  const b = await api("/pastoral/bord/");
+  if(b.success){
+    const d = b.data;
+    document.getElementById("pas-kpis").innerHTML = `
+      ${carte(d.ouverts, t("DOSSIERS OUVERTS","OPEN CASES"))}
+      ${carte(d.en_retard, t("EN RETARD","OVERDUE"))}
+      ${carte(d.nouveaux_convertis, t("NOUVEAUX CONVERTIS","NEW CONVERTS"))}
+      ${carte(d.prieres_nouvelles, t("PRIÈRES NOUVELLES","NEW PRAYERS"))}
+      ${carte(d.confidentiels, t("CONFIDENTIELS","CONFIDENTIAL"))}
+      ${carte(d.actions_30_jours, t("ACTIONS 30 JOURS","ACTIONS 30 DAYS"))}`;
+  }
+  const r = await api("/pastoral/");
+  PAS_DOSSIERS = r.success ? r.data.dossiers : [];
+  const masques = r.success ? r.data.masques : 0;
+  document.getElementById("pas-liste").innerHTML = `
+    <table><thead><tr>
+      <th>${t("Numéro","Number")}</th><th>${t("Personne","Person")}</th><th>${t("Type","Type")}</th>
+      <th>${t("Statut","Status")}</th><th>${t("Responsable","Owner")}</th><th>${t("Échéance","Due")}</th><th></th>
+    </tr></thead><tbody>
+    ${PAS_DOSSIERS.map(x=>`<tr>
+      <td class="muted">${x.numero}</td>
+      <td>${x.personne_nom}${x.confidentialite==="confidentiel"?' <span class="pill bad">🔒</span>':""}</td>
+      <td>${x.type}</td>
+      <td><span class="pill ${x.statut==="clos"?"okk":""}">${x.statut}</span></td>
+      <td class="muted">${x.responsable||"—"}</td>
+      <td class="${x.en_retard?"":"muted"}">${x.echeance||"—"}${x.en_retard?" ⚠":""}</td>
+      <td><button class="act" onclick="ouvreDossier(${x.id})">${t("Ouvrir","Open")}</button></td>
+    </tr>`).join("") || `<tr><td colspan="7" class="muted">${t("Aucun dossier.","No case yet.")}</td></tr>`}
+    </tbody></table>
+    ${masques?`<p class="muted" style="margin-top:10px">${masques} ${t("dossier(s) confidentiel(s) non affiché(s).","confidential case(s) hidden.")}</p>`:""}`;
+}
+
+function carte(n, libelle){ return `<div class="stat"><div class="n">${n}</div><div class="l">${libelle}</div></div>`; }
+
+async function ouvreDossier(id){
+  const r = await api("/pastoral/dossier/", {id});
+  if(!r.success) return toast(r.error, true);
+  const d = r.data.dossier;
+  ouvrirModale(`${d.numero} — ${d.personne_nom}`, `
+    <p class="muted" style="margin:6px 0 14px">${d.type} · ${d.statut} · ${d.confidentialite}</p>
+    ${d.nature_demande?`<p style="margin-bottom:10px">${d.nature_demande}</p>`:""}
+    <p><b>${t("Prochaine étape","Next step")}</b> : ${d.prochaine_etape||"—"}</p>
+    <p><b>${t("Échéance","Due")}</b> : ${d.echeance||"—"}</p>
+    <h4 style="margin:16px 0 8px">${t("Historique","History")}</h4>
+    ${d.historique.map(a=>`<div style="border-left:2px solid var(--line);padding-left:10px;margin-bottom:8px">
+      <div class="muted" style="font-size:11px">${a.date} · ${a.type}${a.lieu?" · "+a.lieu:""}</div>
+      <div>${a.resume||"—"}</div></div>`).join("") || `<p class="muted">${t("Aucune action.","No action yet.")}</p>`}
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      ${perm("pastoral","modifier")?`<button class="btn" onclick="formAction(${d.id})">+ ${t("Action","Action")}</button>`:""}
+      ${perm("pastoral","modifier")&&d.statut!=="clos"?`<button class="btn ghost" onclick="cloreDossier(${d.id})">${t("Clore","Close")}</button>`:""}
+    </div>`);
+}
+
+function formDossier(){
+  ouvrirModale(t("Nouveau dossier pastoral","New pastoral case"), `
+    <label>${t("Personne concernée","Person")}<input id="pa-nom" placeholder="${t("Nom complet","Full name")}"></label>
+    <label>${t("Téléphone","Phone")}<input id="pa-tel"></label>
+    <label>${t("Type","Type")}<select id="pa-type">
+      ${["visite","rendez_vous","nouveau_converti","priere","integration","famille","difficulte","reintegration","hospitalisation","autre"]
+        .map(x=>`<option value="${x}">${x}</option>`).join("")}</select></label>
+    <label>${t("Objet","Subject")}<input id="pa-objet"></label>
+    <label>${t("Nature de la demande","Request")}<textarea id="pa-nature" rows="3"></textarea></label>
+    <label>${t("Confidentialité","Confidentiality")}<select id="pa-conf">
+      <option value="normal">${t("Normal","Normal")}</option>
+      <option value="restreint">${t("Restreint","Restricted")}</option>
+      <option value="confidentiel">${t("Confidentiel","Confidential")}</option></select></label>
+    <label>${t("Échéance","Due date")}<input id="pa-ech" type="date"></label>
+    <button class="btn" style="margin-top:8px" onclick="creeDossier()">${t("Enregistrer","Save")}</button>`);
+}
+
+async function creeDossier(){
+  const d = await api("/pastoral/dossier/creer/", {personne_nom:v("pa-nom"), telephone:v("pa-tel"),
+    type:v("pa-type"), objet:v("pa-objet"), nature_demande:v("pa-nature"),
+    confidentialite:v("pa-conf"), echeance:v("pa-ech")});
+  if(!d.success) return toast(d.error, true);
+  fermeMod(); toast(t("Dossier créé","Case created")); rafraichirPastoral();
+}
+
+function formAction(id){
+  ouvrirModale(t("Nouvelle action","New action"), `
+    <label>${t("Type","Type")}<select id="ac-type">
+      ${["visite","visite_domicile","visite_hopital","appel","rendez_vous","rencontre","priere","autre"]
+        .map(x=>`<option value="${x}">${x}</option>`).join("")}</select></label>
+    <label>${t("Date","Date")}<input id="ac-date" type="date" value="${new Date().toISOString().slice(0,10)}"></label>
+    <label>${t("Lieu","Place")}<input id="ac-lieu"></label>
+    <label>${t("Résumé","Summary")}<textarea id="ac-resume" rows="3"></textarea></label>
+    <label>${t("Prochaine étape","Next step")}<input id="ac-etape"></label>
+    <label>${t("Nouvelle échéance","New due date")}<input id="ac-ech" type="date"></label>
+    <label><input type="checkbox" id="ac-conf" style="width:auto;margin-right:8px">${t("Note confidentielle","Confidential note")}</label>
+    <button class="btn" style="margin-top:8px" onclick="ajouteAction(${id})">${t("Enregistrer","Save")}</button>`);
+}
+
+async function ajouteAction(id){
+  const d = await api("/pastoral/action/", {dossier_id:id, type:v("ac-type"), date:v("ac-date"),
+    lieu:v("ac-lieu"), resume:v("ac-resume"), prochaine_etape:v("ac-etape"), echeance:v("ac-ech"),
+    confidentiel: document.getElementById("ac-conf").checked});
+  if(!d.success) return toast(d.error, true);
+  fermeMod(); toast(t("Action enregistrée","Action saved")); rafraichirPastoral();
+}
+
+async function cloreDossier(id){
+  const d = await api("/pastoral/dossier/statut/", {id, statut:"clos"});
+  if(!d.success) return toast(d.error, true);
+  fermeMod(); toast(t("Dossier clos","Case closed")); rafraichirPastoral();
+}
+
+function formPriere(){
+  ouvrirModale(t("Demande de prière","Prayer request"), `
+    <label>${t("Sujet","Subject")}<input id="pr-sujet"></label>
+    <label>${t("Détail","Detail")}<textarea id="pr-detail" rows="3"></textarea></label>
+    <label>${t("Personne","Person")}<input id="pr-nom" placeholder="${t("Nom (facultatif)","Name (optional)")}"></label>
+    <label>${t("Urgence","Urgency")}<select id="pr-urg">
+      <option value="normale">${t("Normale","Normal")}</option>
+      <option value="haute">${t("Haute","High")}</option>
+      <option value="basse">${t("Basse","Low")}</option></select></label>
+    <button class="btn" style="margin-top:8px" onclick="creePriere()">${t("Ajouter","Add")}</button>`);
+}
+
+async function creePriere(){
+  const d = await api("/pastoral/priere/creer/", {sujet:v("pr-sujet"), detail:v("pr-detail"),
+    personne_nom:v("pr-nom"), urgence:v("pr-urg")});
+  if(!d.success) return toast(d.error, true);
+  fermeMod(); toast(t("Prière enregistrée","Prayer saved")); rafraichirPastoral();
+}
+
+async function voirPrieres(){
+  const r = await api("/pastoral/prieres/");
+  if(!r.success) return toast(r.error, true);
+  ouvrirModale(t("Mur de prière","Prayer wall"), `
+    ${r.data.prieres.map(p=>`<div style="border-bottom:1px solid var(--line);padding:10px 0">
+      <div><b>${p.sujet}</b> <span class="pill ${p.statut==="exaucee"?"okk":""}">${p.statut}</span></div>
+      <div class="muted" style="font-size:12px">${p.personne||"—"} · ${p.recue_le} · ${p.urgence}</div>
+      ${p.detail?`<div style="margin-top:4px">${p.detail}</div>`:""}</div>`).join("") || `<p class="muted">${t("Aucune demande.","No request.")}</p>`}`);
+}
+
 const main = document.getElementById("main");
 async function afficherVue(){
   if(vue==="bord") return vueBord();
   if(vue==="membres") return vueMembres();
   if(vue==="effectifs") return vueEffectifs();
   if(vue==="groupes") return vueGroupes();
+  if(vue==="pastoral") return vuePastoral();
   if(vue==="presences"){ if(!MEMBRES_CACHE.length){ const dm=await api("/membres/?limit=100"); if(dm.success) MEMBRES_CACHE=dm.data.membres; } return vuePresences(); }
   if(vue==="patrimoine") return vuePatrimoine();
   if(vue==="finances") return vueFinances();

@@ -639,3 +639,88 @@ class MouvementBien(models.Model):
 
     class Meta:
         ordering = ["-date", "-id"]
+
+class DossierPastoral(models.Model):
+    """Dossier d'accompagnement. Les notes ne sortent jamais dans les documents d'un membre."""
+    TYPES = [("visite", "Visite pastorale"), ("rendez_vous", "Rendez-vous"),
+             ("nouveau_converti", "Nouveau converti"), ("priere", "Demande de prière"),
+             ("integration", "Intégration"), ("famille", "Accompagnement familial"),
+             ("difficulte", "Personne en difficulté"), ("reintegration", "Réintégration"),
+             ("hospitalisation", "Visite à l'hôpital"), ("autre", "Autre")]
+    STATUTS = [("ouvert", "Ouvert"), ("en_cours", "En cours"), ("en_attente", "En attente"),
+               ("clos", "Clos"), ("abandonne", "Abandonné")]
+    NIVEAUX = [("normal", "Normal"), ("restreint", "Restreint"), ("confidentiel", "Confidentiel")]
+    PRIORITES = [("basse", "Basse"), ("normale", "Normale"), ("haute", "Haute")]
+
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="dossiers_pastoraux")
+    numero = models.CharField(max_length=30, blank=True, default="")
+    personne_nom = models.CharField(max_length=160)
+    membre = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="dossiers_pastoraux")
+    telephone = models.CharField(max_length=40, blank=True, default="")
+    type = models.CharField(max_length=24, choices=TYPES, default="visite")
+    objet = models.CharField(max_length=200, blank=True, default="")
+    nature_demande = models.TextField(blank=True, default="")
+    responsable = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="dossiers_suivis")
+    statut = models.CharField(max_length=16, choices=STATUTS, default="ouvert")
+    confidentialite = models.CharField(max_length=14, choices=NIVEAUX, default="normal")
+    priorite = models.CharField(max_length=8, choices=PRIORITES, default="normale")
+    prochaine_etape = models.CharField(max_length=300, blank=True, default="")
+    echeance = models.DateField(null=True, blank=True)
+    document_url = models.CharField(max_length=500, blank=True, default="")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="dossiers_crees")
+    ouvert_le = models.DateField(null=True, blank=True)
+    clos_le = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def est_verrouille(self):
+        return self.confidentialite == "confidentiel"
+
+
+class ActionPastorale(models.Model):
+    """Visite, appel, rencontre, prière priée : ce qui a réellement été fait."""
+    TYPES = [("visite", "Visite"), ("visite_domicile", "Visite à domicile"),
+             ("visite_hopital", "Visite à l'hôpital"), ("appel", "Appel téléphonique"),
+             ("rendez_vous", "Rendez-vous"), ("rencontre", "Rencontre"),
+             ("priere", "Temps de prière"), ("autre", "Autre")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="actions_pastorales")
+    dossier = models.ForeignKey(DossierPastoral, on_delete=models.CASCADE, related_name="actions")
+    type = models.CharField(max_length=20, choices=TYPES, default="visite")
+    date = models.DateField()
+    lieu = models.CharField(max_length=200, blank=True, default="")
+    resume = models.TextField(blank=True, default="")
+    confidentiel = models.BooleanField(default=False)
+    fait_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    rappel_le = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+
+class DemandePriere(models.Model):
+    STATUTS = [("nouvelle", "Nouvelle"), ("en_priere", "En prière"), ("exaucee", "Exaucée"),
+               ("archivee", "Archivée")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="demandes_priere")
+    membre = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="prieres")
+    personne_nom = models.CharField(max_length=160, blank=True, default="")
+    sujet = models.CharField(max_length=300)
+    detail = models.TextField(blank=True, default="")
+    urgence = models.CharField(max_length=8, choices=[("basse", "Basse"), ("normale", "Normale"),
+                                                      ("haute", "Haute")], default="normale")
+    confidentiel = models.BooleanField(default=False)
+    statut = models.CharField(max_length=12, choices=STATUTS, default="nouvelle")
+    recue_le = models.DateField(null=True, blank=True)
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="prieres_deposees")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]

@@ -4,6 +4,7 @@ from . import views_membres as m
 from . import views_calendrier as cal
 from . import views_finances as fin
 from . import views_patrimoine as pat
+from . import views_pastoral as pas
 
 urlpatterns = [
     # Auth
@@ -110,6 +111,18 @@ urlpatterns = [
     path("patrimoine/bien/mouvement/", pat.bien_mouvement),
     path("patrimoine/alertes/", pat.biens_alertes),
     path("patrimoine/export/", pat.biens_export),
+    # ── Phase 5 : suivi pastoral
+    path("pastoral/", pas.dossiers_liste),
+    path("pastoral/bord/", pas.pastoral_bord),
+    path("pastoral/dossier/", pas.dossier_detail),
+    path("pastoral/dossier/creer/", pas.dossier_creer),
+    path("pastoral/dossier/modifier/", pas.dossier_modifier),
+    path("pastoral/dossier/statut/", pas.dossier_statut),
+    path("pastoral/action/", pas.action_ajouter),
+    path("pastoral/prieres/", pas.prieres_liste),
+    path("pastoral/priere/creer/", pas.priere_creer),
+    path("pastoral/priere/statut/", pas.priere_statut),
+    path("pastoral/export/", pas.pastoral_export),
     # ── Phase 2 : documents de base
     path("document/fiche/", m.document_fiche),
     path("document/carte/", m.document_carte),
