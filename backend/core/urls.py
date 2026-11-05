@@ -5,6 +5,7 @@ from . import views_calendrier as cal
 from . import views_finances as fin
 from . import views_patrimoine as pat
 from . import views_pastoral as pas
+from . import views_enfants as enf
 
 urlpatterns = [
     # Auth
@@ -123,6 +124,26 @@ urlpatterns = [
     path("pastoral/priere/creer/", pas.priere_creer),
     path("pastoral/priere/statut/", pas.priere_statut),
     path("pastoral/export/", pas.pastoral_export),
+    # ── Phase 5 : enfants et école du dimanche
+    path("enfants/", enf.enfants_liste),
+    path("enfants/bord/", enf.enfants_bord),
+    path("enfant/", enf.enfant_detail),
+    path("enfant/creer/", enf.enfant_creer),
+    path("enfant/modifier/", enf.enfant_modifier),
+    path("enfant/autorise/", enf.autorise_ajouter),
+    path("enfant/autorise/retirer/", enf.autorise_retirer),
+    path("enfants/classes/", enf.classes_liste),
+    path("enfants/classe/creer/", enf.classe_creer),
+    path("enfants/affecter/", enf.classe_affecter),
+    path("enfants/presences/", enf.presences_enfants),
+    path("enfants/pointer/", enf.presence_pointer),
+    path("enfants/sortie/", enf.sortie_enregistrer),
+    path("enfants/incidents/", enf.incidents_liste),
+    path("enfants/incident/creer/", enf.incident_creer),
+    path("enfants/lecons/", enf.lecons_liste),
+    path("enfants/lecon/creer/", enf.lecon_creer),
+    path("enfants/progression/", enf.progression_enregistrer),
+    path("enfants/export/", enf.enfants_export),
     # ── Phase 2 : documents de base
     path("document/fiche/", m.document_fiche),
     path("document/carte/", m.document_carte),

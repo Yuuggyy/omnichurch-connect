@@ -154,6 +154,7 @@ function construireNav(){
   if(perm("finances","consulter")) items.push(["finances","₣","Finances","Finance"]);
   if(perm("evenements","consulter")) items.push(["calendrier","▦","Calendrier","Calendar"]);
   if(perm("pastoral","consulter")) items.push(["pastoral","✝","Suivi pastoral","Pastoral care"]);
+  if(perm("enfants","consulter")) items.push(["enfants","◕","Enfants","Children"]);
   if(perm("presences","consulter")) items.push(["presences","✓","Présences","Attendance"]);
   if(perm("utilisateurs","consulter")) items.push(["utilisateurs","👥","Utilisateurs","Users"]);
   if(perm("utilisateurs","consulter")) items.push(["roles","⚖","Rôles & permissions","Roles & permissions"]);
@@ -1091,6 +1092,121 @@ function finExport(){
 // lecture d'un champ de formulaire
 function v(id){ const e = document.getElementById(id); return e ? e.value : ""; }
 
+
+// ═══════════ Enfants et école du dimanche (Phase 5c) ═══════════
+async function vueEnfants(){
+  const d = await api("/enfants/bord/");
+  if(!d.success){ main.innerHTML = `<div class="panel">${d.error||"Erreur"}</div>`; return; }
+  const b = d.data;
+  main.innerHTML = `
+  <div class="top"><h2>${t("Enfants et école du dimanche","Children and Sunday school")}</h2>
+    <div class="row">
+      <button class="btn ghost" onclick="telecharge('/enfants/export/','enfants.csv')">CSV</button>
+      ${perm("enfants","creer")?`<button class="btn" onclick="formEnfant()">+ Enfant</button>
+      <button class="btn ghost" onclick="formClasse()">+ Classe</button>`:""}
+    </div></div>
+  <div class="cards">
+    <div class="stat"><div class="n">${b.actifs}</div><div class="l">${t("ENFANTS ACTIFS","ACTIVE CHILDREN")}</div></div>
+    <div class="stat"><div class="n">${b.presents_aujourdhui}</div><div class="l">${t("PRÉSENTS AUJOURD'HUI","PRESENT TODAY")}</div></div>
+    <div class="stat"><div class="n">${b.classes}</div><div class="l">${t("CLASSES","CLASSES")}</div></div>
+    <div class="stat"><div class="n">${b.incidents_mois}</div><div class="l">${t("INCIDENTS DU MOIS","INCIDENTS THIS MONTH")}</div></div>
+    <div class="stat"><div class="n">${b.parents_non_informes}</div><div class="l">${t("PARENTS NON INFORMÉS","PARENTS NOT TOLD")}</div></div>
+    <div class="stat"><div class="n">${b.sans_autorisation}</div><div class="l">${t("SANS PERSONNE AUTORISÉE","NO AUTHORISED PICKUP")}</div></div>
+  </div>
+  <div class="panel" style="max-width:100%">
+    <h3 style="font-family:'Cormorant Garamond',serif;margin-bottom:12px">${t("Fiches des enfants","Children")}</h3>
+    <table><thead><tr><th>${t("Code","Code")}</th><th>${t("Nom","Name")}</th><th>${t("Âge","Age")}</th>
+    <th>${t("Tuteur","Guardian")}</th><th>${t("Sortie","Pickup")}</th><th></th></tr></thead>
+    <tbody>${b.enfants.map(x=>`<tr>
+      <td style="font-family:'Space Mono',monospace;font-size:11px">${x.code}</td>
+      <td>${x.nom} ${x.prenom||""}</td><td>${x.age===null?"—":x.age}</td>
+      <td>${x.tuteur_nom||"—"}<br><span class="muted" style="font-size:11px">${x.tuteur_telephone||""}</span></td>
+      <td>${x.autorisation_sortie?"✓":"<span class='pill bad'>?</span>"} · ${x.autorises}</td>
+      <td><button class="act" onclick="enfDetail(${x.id})">${t("Ouvrir","Open")}</button></td></tr>`).join("")
+      ||`<tr><td colspan="6" class="muted">${t("Aucun enfant enregistré.","No child yet.")}</td></tr>`}</tbody></table>
+  </div>`;
+}
+
+function formEnfant(){
+  ouvrirModale(t("Nouvelle fiche enfant","New child"), `
+    <label>Nom</label><input id="en-nom"><label>Prénom</label><input id="en-prenom">
+    <label>Date de naissance</label><input id="en-naissance" type="date">
+    <label>Tuteur</label><input id="en-tuteur"><label>Téléphone tuteur</label><input id="en-tel">
+    <label>Contact d'urgence</label><input id="en-urgence"><label>Téléphone urgence</label><input id="en-urgence-tel">
+    <label>Informations de santé (accès restreint)</label><textarea id="en-sante"></textarea>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="en-photo"> Autorisation photo</label>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="en-sortie"> Autorisation de sortie</label>
+    <div class="row" style="margin-top:16px"><button class="btn" onclick="creeEnfant()">${t("Enregistrer","Save")}</button></div>`);
+}
+
+async function creeEnfant(){
+  const d = await api("/enfant/creer/", {nom:v("en-nom"), prenom:v("en-prenom"), date_naissance:v("en-naissance"),
+    tuteur_nom:v("en-tuteur"), tuteur_telephone:v("en-tel"), urgence_nom:v("en-urgence"),
+    urgence_telephone:v("en-urgence-tel"), sante:v("en-sante"),
+    autorisation_photo:document.getElementById("en-photo").checked,
+    autorisation_sortie:document.getElementById("en-sortie").checked});
+  if(!d.success){ toast(d.error, true); return; }
+  fermeMod(); toast(t("Fiche créée : "+d.data.enfant.code,"Child saved")); rafraichirVue();
+}
+
+function formClasse(){
+  ouvrirModale(t("Nouvelle classe","New class"), `
+    <label>Nom</label><input id="cl-nom"><label>Âge minimum</label><input id="cl-min" type="number" value="3">
+    <label>Âge maximum</label><input id="cl-max" type="number" value="12">
+    <label>Salle</label><input id="cl-salle"><label>Capacité</label><input id="cl-cap" type="number">
+    <div class="row" style="margin-top:16px"><button class="btn" onclick="creeClasse()">${t("Créer","Create")}</button></div>`);
+}
+
+async function creeClasse(){
+  const d = await api("/enfants/classe/creer/", {nom:v("cl-nom"), age_min:v("cl-min"), age_max:v("cl-max"),
+    salle:v("cl-salle"), capacite:v("cl-cap")});
+  if(!d.success){ toast(d.error, true); return; }
+  fermeMod(); toast(t("Classe créée","Class created")); rafraichirVue();
+}
+
+async function enfDetail(id){
+  const d = await api("/enfant/", {id});
+  if(!d.success){ toast(d.error, true); return; }
+  const e = d.data.enfant;
+  ouvrirModale(`${e.nom} ${e.prenom||""}`, `
+    <div class="muted" style="font-size:12px;margin-bottom:10px">${e.code} · ${e.age===null?"":e.age+" "+t("ans","years")} · ${t("tuteur","guardian")}: ${e.tuteur_nom||"—"} ${e.tuteur_telephone||""}</div>
+    ${e.sensible_restreint?`<div class="pill bad">${t("Données de santé masquées","Health data hidden")}</div>`:
+      `<div style="margin:8px 0;font-size:12.5px"><b>${t("Santé","Health")}:</b> ${e.sante||"—"}<br><b>${t("Besoins particuliers","Special needs")}:</b> ${e.besoins||"—"}</div>`}
+    <h4 style="margin:14px 0 6px">${t("Personnes autorisées","Authorised pickups")}</h4>
+    ${(d.data.autorises||[]).map(a=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)">${a.nom} <span class="muted">${a.lien||""} ${a.telephone||""}</span></div>`).join("")||`<div class="muted" style="font-size:12px">${t("Aucune personne autorisée.","None yet.")}</div>`}
+    <div class="row" style="margin-top:8px"><input id="au-nom" placeholder="${t("Nom","Name")}" style="flex:2">
+      <input id="au-lien" placeholder="${t("Lien","Relation")}" style="flex:1"></div>
+    <div class="row"><input id="au-tel" placeholder="${t("Téléphone","Phone")}" style="flex:1">
+      <button class="btn ghost" onclick="ajouteAutorise(${id})">${t("Ajouter","Add")}</button></div>
+    <h4 style="margin:14px 0 6px">${t("Pointage du jour","Today")}</h4>
+    <div class="row"><button class="btn ghost" onclick="pointeEnfant(${id},'present')">${t("Présent","Present")}</button>
+      <button class="btn ghost" onclick="pointeEnfant(${id},'retard')">${t("Retard","Late")}</button>
+      <button class="btn ghost" onclick="pointeEnfant(${id},'absent')">${t("Absent","Absent")}</button></div>
+    <div class="row" style="margin-top:8px"><select id="so-auto" style="flex:1">${(d.data.autorises||[]).map(a=>`<option value="${a.id}">${a.nom}</option>`).join("")}</select>
+      <input id="so-heure" placeholder="12:00" style="width:80px">
+      <button class="btn" onclick="sortieEnfant(${id})">${t("Départ","Pickup")}</button></div>
+    <h4 style="margin:14px 0 6px">${t("Dernières présences","Recent attendance")}</h4>
+    <div style="font-size:12px">${(d.data.presences||[]).slice(0,6).map(p=>`${p.date} · ${p.statut} ${p.recupere_par?"· "+p.recupere_par:""}`).join("<br>")||"—"}</div>`);
+}
+
+async function ajouteAutorise(id){
+  const d = await api("/enfant/autorise/", {enfant_id:id, nom:v("au-nom"), lien:v("au-lien"), telephone:v("au-tel")});
+  if(!d.success){ toast(d.error, true); return; }
+  toast(t("Personne autorisée ajoutée","Pickup person added")); enfDetail(id);
+}
+
+async function pointeEnfant(id, statut){
+  const d = await api("/enfants/pointer/", {enfant_id:id, statut, arrivee:new Date().toTimeString().slice(0,5)});
+  if(!d.success){ toast(d.error, true); return; }
+  toast(t("Pointage enregistré","Attendance saved")); enfDetail(id);
+}
+
+async function sortieEnfant(id){
+  const d = await api("/enfants/sortie/", {enfant_id:id, autorise_id:v("so-auto"), heure:v("so-heure")});
+  if(!d.success){ toast(d.error, true); return; }
+  toast(t("Départ enregistré","Pickup saved")); enfDetail(id);
+}
+
 // ─── Calendrier (Phase 3) ───
 let CAL_MOIS = (function(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); })();
 let CAL_DATA = null;
@@ -1423,6 +1539,7 @@ async function afficherVue(){
   if(vue==="effectifs") return vueEffectifs();
   if(vue==="groupes") return vueGroupes();
   if(vue==="pastoral") return vuePastoral();
+  if(vue==="enfants") return vueEnfants();
   if(vue==="presences"){ if(!MEMBRES_CACHE.length){ const dm=await api("/membres/?limit=100"); if(dm.success) MEMBRES_CACHE=dm.data.membres; } return vuePresences(); }
   if(vue==="patrimoine") return vuePatrimoine();
   if(vue==="finances") return vueFinances();

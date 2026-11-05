@@ -1,4 +1,5 @@
 from django.db import models
+from datetime import date
 import secrets
 
 
@@ -724,3 +725,137 @@ class DemandePriere(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+# ═══════════════ Phase 5c : enfants et école du dimanche ═══════════════
+
+class Enfant(models.Model):
+    """Fiche d'enfant protégée. Les champs sensibles ne sortent que sur droit de validation."""
+    STATUTS = [("actif", "Actif"), ("sorti", "Sorti"), ("archive", "Archivé")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="enfants")
+    code = models.CharField(max_length=30, blank=True, default="")
+    nom = models.CharField(max_length=120)
+    postnom = models.CharField(max_length=120, blank=True, default="")
+    prenom = models.CharField(max_length=120, blank=True, default="")
+    sexe = models.CharField(max_length=1, blank=True, default="")
+    date_naissance = models.DateField(null=True, blank=True)
+    tuteur_nom = models.CharField(max_length=150, blank=True, default="")
+    tuteur_lien = models.CharField(max_length=60, blank=True, default="")
+    tuteur_telephone = models.CharField(max_length=40, blank=True, default="")
+    tuteur_email = models.CharField(max_length=150, blank=True, default="")
+    urgence_nom = models.CharField(max_length=150, blank=True, default="")
+    urgence_telephone = models.CharField(max_length=40, blank=True, default="")
+    sante = models.TextField(blank=True, default="")
+    besoins = models.TextField(blank=True, default="")
+    autorisation_photo = models.BooleanField(default=False)
+    autorisation_sortie = models.BooleanField(default=False)
+    statut = models.CharField(max_length=12, choices=STATUTS, default="actif")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nom", "prenom"]
+
+    def age(self):
+        if not self.date_naissance:
+            return None
+        a = date.today()
+        return a.year - self.date_naissance.year - ((a.month, a.day) < (self.date_naissance.month, self.date_naissance.day))
+
+
+class PersonneAutorisee(models.Model):
+    """Personne habilitée à récupérer l'enfant (section 19.2)."""
+    enfant = models.ForeignKey(Enfant, on_delete=models.CASCADE, related_name="autorises")
+    nom = models.CharField(max_length=150)
+    lien = models.CharField(max_length=60, blank=True, default="")
+    telephone = models.CharField(max_length=40, blank=True, default="")
+    piece = models.CharField(max_length=80, blank=True, default="")
+    actif = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ClasseEnfants(models.Model):
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="classes_enfants")
+    nom = models.CharField(max_length=120)
+    age_min = models.IntegerField(default=3)
+    age_max = models.IntegerField(default=12)
+    salle = models.CharField(max_length=120, blank=True, default="")
+    capacite = models.IntegerField(null=True, blank=True)
+    moniteur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="classes_enfants")
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["age_min", "nom"]
+
+
+class InscriptionEnfant(models.Model):
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="inscriptions_enfants")
+    enfant = models.ForeignKey(Enfant, on_delete=models.CASCADE, related_name="inscriptions")
+    classe = models.ForeignKey(ClasseEnfants, on_delete=models.CASCADE, related_name="inscriptions")
+    annee_scolaire = models.CharField(max_length=20, blank=True, default="")
+    date = models.DateField(default=date.today)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-date"]
+
+
+class PresenceEnfant(models.Model):
+    STATUTS = [("present", "Présent"), ("retard", "Retard"), ("absent", "Absent")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="presences_enfants")
+    enfant = models.ForeignKey(Enfant, on_delete=models.CASCADE, related_name="presences")
+    classe = models.ForeignKey(ClasseEnfants, null=True, blank=True, on_delete=models.SET_NULL)
+    date = models.DateField(default=date.today)
+    statut = models.CharField(max_length=10, choices=STATUTS, default="present")
+    arrivee = models.CharField(max_length=10, blank=True, default="")
+    depart = models.CharField(max_length=10, blank=True, default="")
+    recupere_par = models.ForeignKey(PersonneAutorisee, null=True, blank=True, on_delete=models.SET_NULL)
+    sortie_note = models.CharField(max_length=250, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "enfant__nom"]
+        constraints = [models.UniqueConstraint(fields=["enfant", "date"], name="unique_presence_enfant_date")]
+
+
+class IncidentEnfant(models.Model):
+    TYPES = [("sante", "Santé"), ("comportement", "Comportement"), ("accident", "Accident"), ("autre", "Autre")]
+    GRAVITES = [("legere", "Légère"), ("moyenne", "Moyenne"), ("grave", "Grave")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="incidents_enfants")
+    enfant = models.ForeignKey(Enfant, on_delete=models.CASCADE, related_name="incidents")
+    date = models.DateField(default=date.today)
+    type = models.CharField(max_length=20, choices=TYPES, default="autre")
+    gravite = models.CharField(max_length=10, choices=GRAVITES, default="legere")
+    description = models.TextField(blank=True, default="")
+    action = models.TextField(blank=True, default="")
+    parent_informe = models.BooleanField(default=False)
+    signale_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class LeconEnfants(models.Model):
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="lecons_enfants")
+    classe = models.ForeignKey(ClasseEnfants, null=True, blank=True, on_delete=models.SET_NULL)
+    titre = models.CharField(max_length=180)
+    date = models.DateField(default=date.today)
+    objectif = models.TextField(blank=True, default="")
+    activite = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date"]
+
+
+class ProgressionEnfant(models.Model):
+    NIVEAUX = [("non_acquis", "Non acquis"), ("en_cours", "En cours"), ("acquis", "Acquis")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="progressions_enfants")
+    enfant = models.ForeignKey(Enfant, on_delete=models.CASCADE, related_name="progressions")
+    lecon = models.ForeignKey(LeconEnfants, on_delete=models.CASCADE, related_name="progressions")
+    niveau = models.CharField(max_length=12, choices=NIVEAUX, default="en_cours")
+    note = models.CharField(max_length=250, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["enfant", "lecon"], name="unique_progression_enfant_lecon")]

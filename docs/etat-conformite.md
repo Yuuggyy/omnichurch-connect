@@ -133,6 +133,12 @@ Budgets par département, activité ou projet, avec consommation, engagé, payé
 Clôture mensuelle en deux temps (préparation puis approbation par une autre personne), verrouillage de la période et passage des opérations payées en « clôturé ». Rapprochements de caisse, de banque et de Mobile Money avec écart obligatoirement justifié. Rapport annuel mois par mois, export CSV, tableau de bord des soldes.
 Vérification : 60 tests automatisés, tous réussis. Déployé et testé en ligne le 5 novembre 2026 (taux 2850 CDF/USD, recette de 250 000 CDF convertie à 87,72 USD, reçu REC-2026-00001, dépense approuvée puis payée, solde recalculé).
 
+## 15 et 19. Enfants et école du dimanche — FAIT (Phase 5)
+Fiches protégées et numérotées (ENF-AAAA-0001) avec âge calculé, parents et tuteurs, contacts d'urgence, autorisations photo et sortie, informations de santé et besoins particuliers.
+Sécurité réelle : santé et besoins ne sortent de la base que pour les détenteurs du droit de validation du module enfants ; pour un moniteur, la fiche indique simplement que l'information est restreinte. Toute consultation sensible et toute modification sensible sont journalisées.
+Personnes autorisées à récupérer l'enfant, contrôle des départs refusé aux personnes non autorisées (tracé), pointage des arrivées avec heure, départ avec heure et nom de la personne. Classes par tranche d'âge avec moniteur, salle, capacité et refus d'inscription si la classe est complète. Incidents (santé, comportement, accident) avec gravité et information des parents, leçons et progression pédagogique par enfant.
+Vérification : 30 tests automatisés, tous réussis (champs sensibles, contrôle des sorties, audit, isolation, permissions). Déployé et testé en ligne le 5 novembre 2026.
+
 ## 16. Suivi pastoral et accompagnement — FAIT (Phase 5)
 Dossiers d'accompagnement numérotés (DP-AAAA-00001) pour visites, rendez-vous, nouveaux convertis, demandes de prière, intégration, familles, personnes en difficulté, réintégration et visites à l'hôpital. Chaque dossier porte la personne concernée (membre ou simple visiteur), la nature de la demande, un responsable, une priorité, un statut, une prochaine étape et une échéance avec alerte de retard.
 Historique des actions réellement accomplies : visite à domicile, visite à l'hôpital, appel, rencontre, temps de prière, avec lieu, résumé, auteur et rappel. Mur de prière séparé avec urgence et statuts (nouvelle, en prière, exaucée, archivée).
