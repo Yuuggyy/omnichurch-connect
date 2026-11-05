@@ -55,6 +55,25 @@ input:focus,select:focus{border-color:var(--gold)}
 .perm-grid .acts{display:flex;gap:6px;flex-wrap:wrap}
 .ck{background:rgba(10,16,30,.7);border:1px solid var(--line);color:var(--muted);font-size:10.5px;padding:4px 9px;border-radius:7px;cursor:pointer;font-family:inherit}
 .ck.on{color:#101523;background:var(--gold);border-color:var(--gold);font-weight:600}
+.cal-tete{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 6px}
+.cal-tete h2{font-family:'Cormorant Garamond',serif;font-size:27px;color:var(--gold2);margin-right:auto}
+.cal-grille{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.cal-jour{background:#0F1A2E;min-height:104px;padding:7px 8px;font-size:11.5px;position:relative}
+.cal-jour.vide{background:#0B1424;opacity:.45}
+.cal-jour.aujourdhui{box-shadow:inset 0 0 0 1.5px var(--gold)}
+.cal-num{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:5px}
+.cal-num.wk{color:#f2a49d}
+.cal-ev{display:block;width:100%;text-align:left;border:none;cursor:pointer;border-radius:6px;padding:3px 6px;margin-bottom:3px;font-size:11px;font-family:inherit;line-height:1.35;background:rgba(201,162,39,.14);color:var(--gold2);border-left:2.5px solid var(--gold)}
+.cal-ev.t-reunion{background:rgba(93,156,236,.14);color:#9CC5F7;border-left-color:#5D9CEC}
+.cal-ev.t-priere{background:rgba(150,120,230,.16);color:#C4B0F7;border-left-color:#9678E6}
+.cal-ev.t-formation{background:rgba(59,178,115,.14);color:#9FDcb9;border-left-color:#3BB273}
+.cal-ev.t-veillee{background:rgba(224,140,75,.14);color:#F3B98A;border-left-color:#E08C4B}
+.cal-ev.annule{text-decoration:line-through;opacity:.55}
+.cal-legende{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:12px}
+.cal-champ{margin-top:12px}
+.cal-champ label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:5px}
+.cal-champ input,.cal-champ select,.cal-champ textarea{width:100%;background:rgba(10,16,30,.7);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px 11px;font-family:inherit;font-size:13px}
+.cal-deux{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .toast{position:fixed;bottom:26px;right:26px;background:#1B2947;border:1px solid var(--line);color:var(--gold2);padding:14px 20px;border-radius:11px;font-size:13px;z-index:20;display:none;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .toast.bad{color:#f2a49d;border-color:rgba(224,86,75,.4)}
 .lang{position:fixed;top:14px;right:18px;z-index:5;font-family:'Space Grotesk',monospace;font-size:10px;letter-spacing:.2em;color:var(--muted);background:rgba(16,26,46,.8);border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer}
@@ -114,6 +133,7 @@ function construireNav(){
   if(perm("membres","consulter")) items.push(["membres","✦","Membres","Members"]);
   if(perm("membres","consulter")) items.push(["effectifs","Σ","Effectifs","Headcount"]);
   if(perm("groupes","consulter")) items.push(["groupes","⌘","Groupes","Groups"]);
+  if(perm("evenements","consulter")) items.push(["calendrier","▦","Calendrier","Calendar"]);
   if(perm("presences","consulter")) items.push(["presences","✓","Présences","Attendance"]);
   if(perm("utilisateurs","consulter")) items.push(["utilisateurs","👥","Utilisateurs","Users"]);
   if(perm("utilisateurs","consulter")) items.push(["roles","⚖","Rôles & permissions","Roles & permissions"]);
@@ -653,6 +673,177 @@ async function supprimerPresence(id){
   if(d.success){ toast("✓"); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
 }
 
+// ─── Calendrier (Phase 3) ───
+let CAL_MOIS = (function(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); })();
+let CAL_DATA = null;
+const MOIS_FR = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+const MOIS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+function calDecale(n){
+  let [a,m] = CAL_MOIS.split("-").map(Number);
+  m += n;
+  while(m<1){ m+=12; a--; }
+  while(m>12){ m-=12; a++; }
+  CAL_MOIS = a+"-"+String(m).padStart(2,"0");
+  vueCalendrier();
+}
+
+async function vueCalendrier(){
+  const d = await api("/calendrier/?mois="+CAL_MOIS);
+  if(!d.success){ main.innerHTML = `<div class="panel">${d.error||"Erreur"}</div>`; return; }
+  CAL_DATA = d.data;
+  const [annee, moisNum] = CAL_MOIS.split("-").map(Number);
+  const premier = new Date(annee, moisNum-1, 1);
+  const decalage = (premier.getDay()+6)%7;           // lundi = 0
+  const nbJours = new Date(annee, moisNum, 0).getDate();
+  const aujourdhui = new Date().toISOString().slice(0,10);
+  let cases = "";
+  for(let i=0;i<decalage;i++) cases += `<div class="cal-jour vide"></div>`;
+  for(let j=1;j<=nbJours;j++){
+    const iso = CAL_MOIS+"-"+String(j).padStart(2,"0");
+    const evs = CAL_DATA.jours[iso]||[];
+    const semaine = [0,6].includes(new Date(annee, moisNum-1, j).getDay());
+    cases += `<div class="cal-jour${iso===aujourdhui?" aujourdhui":""}">
+      <div class="cal-num${semaine?" wk":""}">${j}</div>
+      ${evs.map(e=>`<button class="cal-ev t-${e.type}${e.statut==="annule"?" annule":""}" onclick="ouvreEvenement(${e.id})">
+        ${e.journee_entiere?"":(e.heure||"")+" "}${e.titre.length>26?e.titre.slice(0,25)+"…":e.titre}</button>`).join("")}
+    </div>`;
+  }
+  main.innerHTML = `
+    <div class="cal-tete">
+      <h2>${(lang==="fr"?MOIS_FR:MOIS_EN)[moisNum-1]} ${annee}</h2>
+      <button class="btn ghost" onclick="calDecale(-1)">←</button>
+      <button class="btn ghost" onclick="CAL_MOIS=new Date().toISOString().slice(0,7);vueCalendrier()">${t("Aujourd'hui","Today")}</button>
+      <button class="btn ghost" onclick="calDecale(1)">→</button>
+      ${perm("evenements","exporter")?`<button class="btn ghost" onclick="telecharge('/calendrier/export/?mois=${CAL_MOIS}')">CSV</button>
+      <button class="btn ghost" onclick="telecharge('/evenement/ical/?mois=${CAL_MOIS}')">iCal</button>`:""}
+      ${perm("evenements","creer")?`<button class="btn" onclick="formEvenement()">+ ${t("Événement","Event")}</button>`:""}
+    </div>
+    <p class="muted">${CAL_DATA.total} ${t("occurrence(s) ce mois-ci","occurrence(s) this month")}</p>
+    <div class="cal-grille">
+      ${["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map((j,i)=>`<div class="cal-jour" style="min-height:auto;background:#141F37;text-align:center;font-size:10.5px;letter-spacing:.08em;color:var(--muted)">${(lang==="fr"?["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"]:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])[i].toUpperCase()}</div>`).join("")}
+      ${cases}
+    </div>
+    <div class="cal-legende">
+      <span>▪ Culte</span><span style="color:#9CC5F7">▪ Réunion</span><span style="color:#C4B0F7">▪ Prière</span>
+      <span style="color:#9FDcb9">▪ Formation</span><span style="color:#F3B98A">▪ Veillée</span>
+    </div>`;
+}
+
+function telecharge(chemin){
+  fetch(API+chemin,{headers:{"X-Auth-Token":TOKEN}}).then(r=>r.blob()).then(b=>{
+    const url = URL.createObjectURL(b); const a = document.createElement("a");
+    a.href = url; a.download = chemin.includes("ical")?"calendrier.ics":"calendrier.csv"; a.click(); URL.revokeObjectURL(url);
+  });
+}
+
+async function ouvreEvenement(id){
+  const d = await api("/evenement/?id="+id);
+  if(!d.success){ toast(d.error||"Erreur", true); return; }
+  const e = d.data.evenement;
+  const st = {planifie:["Planifié",""],confirme:["Confirmé","okk"],annule:["Annulé","bad"],termine:["Terminé",""]}[e.statut]||["—",""];
+  ouvrirModale(e.titre, `
+    <p><span class="pill ${st[1]}">${st[0]}</span>
+       <span class="pill">${e.type}</span>
+       ${e.recurrence!=="aucune"?`<span class="pill">${e.recurrence}</span>`:""}</p>
+    <p class="muted" style="margin-top:10px">📅 ${e.date}${e.heure?" · "+e.heure:""}${e.heure_fin?"–"+e.heure_fin:""}
+      ${e.lieu?"<br>📍 "+e.lieu:""}
+      ${e.public_cible?"<br>👥 "+e.public_cible:""}
+      ${e.capacite?"<br>🎟️ "+e.inscrits+"/"+e.capacite+" "+t("inscrits","registered"):""}
+      ${e.presents?"<br>✓ "+e.presents+" "+t("présents pointés","checked in"):""}</p>
+    ${e.description?`<p style="margin-top:10px;font-size:13px">${e.description}</p>`:""}
+    ${e.participants.length?`<p class="muted" style="margin-top:12px;font-size:12px">${e.participants.map(p=>p.nom||p.matricule).join(", ")}</p>`:""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
+      ${perm("evenements","modifier")?`<button class="btn ghost" onclick="formEvenement(${e.id})">${t("Modifier","Edit")}</button>`:""}
+      ${perm("evenements","creer")?`<button class="btn ghost" onclick="formInscription(${e.id})">${t("Inscrire","Register")}</button>`:""}
+      ${perm("evenements","modifier")&&e.statut!=="confirme"?`<button class="btn ghost" onclick="statutEvenement(${e.id},'confirme')">${t("Confirmer","Confirm")}</button>`:""}
+      ${perm("evenements","modifier")&&e.statut!=="annule"?`<button class="btn ghost" onclick="statutEvenement(${e.id},'annule')">${t("Annuler","Cancel")}</button>`:""}
+      ${perm("evenements","exporter")?`<button class="btn ghost" onclick="telecharge('/evenement/ical/?id=${e.id}')">iCal</button>`:""}
+      ${perm("evenements","supprimer")?`<button class="btn ghost" style="color:#f2a49d" onclick="supprimeEvenement(${e.id})">${t("Supprimer","Delete")}</button>`:""}
+    </div>`);
+}
+
+async function statutEvenement(id, statut){
+  const d = await api("/evenement/statut/", {id:id, statut:statut});
+  toast(d.success?t("Statut mis à jour","Status updated"):(d.error||"Erreur"), !d.success);
+  if(d.success){ fermeMod(); vueCalendrier(); }
+}
+
+async function supprimeEvenement(id){
+  if(!confirm(t("Supprimer définitivement cet événement ?","Delete this event permanently?"))) return;
+  const d = await api("/evenement/supprimer/", {id:id});
+  toast(d.success?t("Événement supprimé","Event deleted"):(d.error||"Erreur"), !d.success);
+  if(d.success){ fermeMod(); vueCalendrier(); }
+}
+
+async function formEvenement(id){
+  let e = null;
+  if(id){ const d = await api("/evenement/?id="+id); if(d.success) e = d.data.evenement; }
+  const v = k => e && e[k]!=null ? e[k] : "";
+  const types = [["culte","Culte"],["reunion","Réunion"],["priere","Prière"],["veillee","Veillée"],["formation","Formation"],["autre","Autre"]];
+  const recs = [["aucune","Aucune"],["hebdomadaire","Chaque semaine"],["mensuelle","Chaque mois"],["annuelle","Chaque année"]];
+  ouvrirModale(e?t("Modifier l'événement","Edit event"):t("Nouvel événement","New event"), `
+    <div class="cal-champ"><label>${t("Titre","Title")} *</label><input id="ev-titre" value="${e?e.titre:""}"></div>
+    <div class="cal-deux">
+      <div class="cal-champ"><label>${t("Type","Type")}</label><select id="ev-type">${types.map(([k,l])=>`<option value="${k}"${e&&e.type===k?" selected":""}>${l}</option>`).join("")}</select></div>
+      <div class="cal-champ"><label>${t("Récurrence","Repeat")}</label><select id="ev-rec">${recs.map(([k,l])=>`<option value="${k}"${e&&e.recurrence===k?" selected":""}>${l}</option>`).join("")}</select></div>
+    </div>
+    <div class="cal-deux">
+      <div class="cal-champ"><label>${t("Date","Date")} *</label><input type="date" id="ev-date" value="${v("date")}"></div>
+      <div class="cal-champ"><label>${t("Lieu","Place")}</label><input id="ev-lieu" value="${v("lieu")}"></div>
+    </div>
+    <div class="cal-deux">
+      <div class="cal-champ"><label>${t("Début","Start")}</label><input type="time" id="ev-heure" value="${v("heure")}"></div>
+      <div class="cal-champ"><label>${t("Fin","End")}</label><input type="time" id="ev-heure-fin" value="${v("heure_fin")}"></div>
+    </div>
+    <div class="cal-deux">
+      <div class="cal-champ"><label>${t("Capacité (vide = illimitée)","Capacity (blank = unlimited)")}</label><input type="number" min="1" id="ev-cap" value="${e&&e.capacite?e.capacite:""}"></div>
+      <div class="cal-champ"><label>${t("Public cible","Audience")}</label><input id="ev-public" value="${v("public_cible")}"></div>
+    </div>
+    <div class="cal-champ"><label>${t("Description","Description")}</label><textarea id="ev-desc" rows="3">${v("description")}</textarea></div>
+    <div style="display:flex;gap:9px;margin-top:18px">
+      <button class="btn" onclick="enregistreEvenement(${id||0})">${t("Enregistrer","Save")}</button>
+      <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button>
+    </div>`);
+}
+
+async function enregistreEvenement(id){
+  const corps = {
+    titre: document.getElementById("ev-titre").value,
+    type: document.getElementById("ev-type").value,
+    recurrence: document.getElementById("ev-rec").value,
+    date: document.getElementById("ev-date").value,
+    lieu: document.getElementById("ev-lieu").value,
+    heure: document.getElementById("ev-heure").value,
+    heure_fin: document.getElementById("ev-heure-fin").value,
+    capacite: document.getElementById("ev-cap").value || null,
+    public_cible: document.getElementById("ev-public").value,
+    description: document.getElementById("ev-desc").value
+  };
+  if(id) corps.id = id;
+  const d = await api(id?"/evenement/modifier/":"/evenement/creer/", corps);
+  toast(d.success?t("Événement enregistré","Event saved"):(d.error||"Erreur"), !d.success);
+  if(d.success){ fermeMod(); vueCalendrier(); }
+}
+
+async function formInscription(evId){
+  const dm = await api("/membres/?limit=200");
+  const membres = dm.success ? dm.data.membres : [];
+  ouvrirModale(t("Inscrire un membre","Register a member"), `
+    <div class="cal-champ"><label>${t("Membre","Member")}</label>
+      <select id="ins-membre">${membres.map(m=>`<option value="${m.id}">${m.matricule?m.matricule+" · ":""}${m.nom||""} ${m.prenom||""}</option>`).join("")}</select></div>
+    <div style="display:flex;gap:9px;margin-top:18px">
+      <button class="btn" onclick="inscris(${evId})">${t("Inscrire","Register")}</button>
+      <button class="btn ghost" onclick="fermeMod()">${t("Annuler","Cancel")}</button>
+    </div>`);
+}
+
+async function inscris(evId){
+  const d = await api("/evenement/inscrire/", {evenement_id:evId, membre_id:document.getElementById("ins-membre").value});
+  toast(d.success?t("Membre inscrit","Member registered"):(d.error||"Erreur"), !d.success);
+  if(d.success){ fermeMod(); vueCalendrier(); }
+}
+
 const main = document.getElementById("main");
 async function afficherVue(){
   if(vue==="bord") return vueBord();
@@ -660,6 +851,7 @@ async function afficherVue(){
   if(vue==="effectifs") return vueEffectifs();
   if(vue==="groupes") return vueGroupes();
   if(vue==="presences"){ if(!MEMBRES_CACHE.length){ const dm=await api("/membres/?limit=100"); if(dm.success) MEMBRES_CACHE=dm.data.membres; } return vuePresences(); }
+  if(vue==="calendrier") return vueCalendrier();
   if(vue==="utilisateurs"){ const d=await api("/utilisateurs/"); if(d.success) MOI_CACHE=d.data.utilisateurs; return vueUtilisateurs(); }
   if(vue==="roles") return vueRoles();
   if(vue==="invitations"){ if(!ROLES_CACHE.length){ const r=await api("/roles/"); if(r.success){ROLES_CACHE=r.data.roles;MODULES=r.data.modules;ACTIONS=r.data.actions;} } return vueInvitations(); }

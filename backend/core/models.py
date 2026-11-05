@@ -251,21 +251,72 @@ class MembreGroupe(models.Model):
 
 
 class Evenement(models.Model):
-    """Activité pointée : culte, réunion, prière. Le calendrier complet arrive en Phase 3."""
+    """Calendrier de l'Église : cultes, réunions, formations, activités spéciales (Phase 3)."""
     TYPES = [("culte", "Culte"), ("reunion", "Réunion"), ("priere", "Prière"),
              ("veillee", "Veillée"), ("formation", "Formation"), ("autre", "Autre")]
+    STATUTS_EVENEMENT = [("planifie", "Planifié"), ("confirme", "Confirmé"),
+                         ("annule", "Annulé"), ("termine", "Terminé")]
+    RECURRENCES = [("aucune", "Aucune"), ("hebdomadaire", "Chaque semaine"),
+                   ("mensuelle", "Chaque mois"), ("annuelle", "Chaque année")]
     eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="evenements")
     titre = models.CharField(max_length=200)
     type = models.CharField(max_length=20, choices=TYPES, default="culte")
     date = models.DateField()
     heure = models.CharField(max_length=10, blank=True, default="")
+    heure_fin = models.CharField(max_length=10, blank=True, default="")
     lieu = models.CharField(max_length=200, blank=True, default="")
     groupe = models.ForeignKey(Groupe, null=True, blank=True, on_delete=models.SET_NULL,
                                related_name="evenements")
+    # ── Phase 3
+    description = models.TextField(blank=True, default="")
+    date_fin = models.DateField(null=True, blank=True)
+    duree_minutes = models.IntegerField(null=True, blank=True)
+    journee_entiere = models.BooleanField(default=False)
+    capacite = models.IntegerField(null=True, blank=True)
+    public_cible = models.CharField(max_length=120, blank=True, default="")
+    statut = models.CharField(max_length=20, choices=STATUTS_EVENEMENT, default="planifie")
+    recurrence = models.CharField(max_length=20, choices=RECURRENCES, default="aucune")
+    rappel_jours = models.IntegerField(default=1)
+    responsable = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="evenements_diriges")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="evenements_crees")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "heure"]
+
+    def duree(self):
+        """Durée en minutes : explicite, ou déduite de l'heure de fin quand elle existe."""
+        if self.duree_minutes:
+            return self.duree_minutes
+        if self.heure and self.heure_fin:
+            try:
+                h1, m1 = [int(x) for x in self.heure.split(":")[:2]]
+                h2, m2 = [int(x) for x in self.heure_fin.split(":")[:2]]
+                return max(0, (h2 * 60 + m2) - (h1 * 60 + m1))
+            except (ValueError, IndexError):
+                return None
+        return None
+
+
+class EvenementInscription(models.Model):
+    """Personnes annoncées à un événement, distinctes du pointage de présence."""
+    STATUTS = [("inscrit", "Inscrit"), ("confirme", "Confirmé"), ("desinscrit", "Désinscrit")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="inscriptions_evenements")
+    evenement = models.ForeignKey(Evenement, on_delete=models.CASCADE, related_name="inscriptions")
+    membre = models.ForeignKey(Membre, on_delete=models.CASCADE, related_name="inscriptions_evenements")
+    statut = models.CharField(max_length=20, choices=STATUTS, default="inscrit")
+    note = models.CharField(max_length=300, blank=True, default="")
+    cree_par = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-date"]
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["evenement", "membre"], name="unique_inscription_evenement"),
+        ]
 
 
 class Presence(models.Model):

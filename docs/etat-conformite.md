@@ -124,3 +124,9 @@ Membres et dossiers individuels, matricules configurables, effectif global décl
 ---
 
 *État de conformité OmniChurch Connect · 28 octobre 2026 · Inspire by YuuStore*
+
+## 13. Calendrier et événements — FAIT (Phase 3)
+Calendrier mensuel réel dans l'admin, navigation d'un mois à l'autre, jour courant repéré. Un événement porte un titre, un type, une date de début et de fin, une heure de début et de fin, une durée calculée, un lieu, une description, un public cible, une capacité, un statut (planifié, confirmé, annulé, terminé), une récurrence (aucune, hebdomadaire, mensuelle, annuelle) et un délai de rappel.
+Récurrences projetées à la volée, sans dupliquer de fiche. Inscriptions nominatives des membres avec contrôle de capacité, désinscription sans perte d'historique. Export iCalendar (.ics) d'un événement ou du mois, export CSV du mois, agenda des prochains jours.
+Sécurité : filtrage systématique sur l'Église de l'utilisateur, isolation entre deux Églises et permissions testées. Suppression refusée dès qu'un pointage de présence existe.
+Vérification : 37 tests de la Phase 3 et 39 tests de la Phase 2, tous réussis.

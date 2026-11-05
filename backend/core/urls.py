@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views_api as v
 from . import views_membres as m
+from . import views_calendrier as cal
 
 urlpatterns = [
     # Auth
@@ -51,11 +52,23 @@ urlpatterns = [
     path("groupe/retirer/", m.groupe_retirer),
     # ── Phase 2 : présences
     path("evenements/", m.evenements_liste),
-    path("evenement/creer/", m.evenement_creer),
+    path("evenement/creer/", cal.evenement_creer),
     path("presences/", m.presences_liste),
     path("presence/pointer/", m.presence_pointer),
     path("presence/supprimer/", m.presence_supprimer),
     path("presences/stats/", m.presences_stats),
+    # ── Phase 3 : calendrier complet
+    path("calendrier/", cal.calendrier_mois),
+    path("calendrier/export/", cal.calendrier_export),
+    path("evenement/", cal.evenement_detail),
+    path("evenement/modifier/", cal.evenement_modifier),
+    path("evenement/statut/", cal.evenement_statut),
+    path("evenement/supprimer/", cal.evenement_supprimer),
+    path("evenement/ical/", cal.evenement_ical),
+    path("evenement/inscrire/", cal.evenement_inscrire),
+    path("evenement/desinscrire/", cal.evenement_desinscrire),
+    path("evenement/participants/", cal.evenement_participants),
+    path("evenements/a-venir/", cal.evenements_a_venir),
     # ── Phase 2 : documents de base
     path("document/fiche/", m.document_fiche),
     path("document/carte/", m.document_carte),
