@@ -1,5 +1,5 @@
 from django.db import models
-from datetime import date
+from datetime import date, timedelta
 import secrets
 
 
@@ -957,3 +957,70 @@ class MediaVu(models.Model):
     media = models.ForeignKey(Media, on_delete=models.CASCADE, related_name="ecoutes")
     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
     le = models.DateTimeField(auto_now_add=True)
+
+
+# ═══════════════ Phase 5e : documents et actes officiels (section 17) ═══════════════
+
+class ModeleDocument(models.Model):
+    """Modèle réutilisable : le corps contient des variables {{nom}}, {{matricule}}, {{eglise}}…"""
+    TYPES = [("certificat_bapteme", "Certificat de baptême"), ("certificat_mariage", "Certificat de mariage"),
+             ("attestation_ordination", "Attestation d'ordination"),
+             ("certificat_consecration", "Certificat de consécration"),
+             ("attestation_transfert", "Attestation de transfert"),
+             ("attestation_formation", "Attestation de formation"),
+             ("carte_membre", "Carte de membre"), ("attestation_presence", "Attestation de présence"),
+             ("pv", "Procès-verbal"), ("rapport", "Rapport"), ("interne", "Document interne"),
+             ("formulaire", "Formulaire vierge")]
+    eglise = models.ForeignKey(Eglise, null=True, blank=True, on_delete=models.CASCADE,
+                               related_name="modeles_documents")
+    nom = models.CharField(max_length=150)
+    type = models.CharField(max_length=30, choices=TYPES, default="interne")
+    corps = models.TextField(blank=True, default="")
+    jours_alerte = models.IntegerField(default=30)
+    actif = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["type", "nom"]
+
+
+class Document(models.Model):
+    STATUTS = [("brouillon", "Brouillon"), ("valide", "Validé"), ("archive", "Archivé")]
+    eglise = models.ForeignKey(Eglise, on_delete=models.CASCADE, related_name="documents")
+    numero = models.CharField(max_length=40)
+    type = models.CharField(max_length=30, choices=ModeleDocument.TYPES, default="interne")
+    modele = models.ForeignKey(ModeleDocument, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="documents")
+    membre = models.ForeignKey(Membre, null=True, blank=True, on_delete=models.SET_NULL,
+                              related_name="documents")
+    titre = models.CharField(max_length=200)
+    contenu = models.TextField(blank=True, default="")
+    fichier_url = models.CharField(max_length=600, blank=True, default="")
+    version = models.IntegerField(default=1)
+    statut = models.CharField(max_length=12, choices=STATUTS, default="brouillon")
+    date_emission = models.DateField(null=True, blank=True)
+    date_expiration = models.DateField(null=True, blank=True)
+    auteur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="documents_crees")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def expire_bientot(self, jours=30):
+        if not self.date_expiration or self.statut == "archive":
+            return False
+        return date.today() <= self.date_expiration <= date.today() + timedelta(days=jours)
+
+
+class DocumentVersion(models.Model):
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="versions")
+    version = models.IntegerField()
+    contenu = models.TextField(blank=True, default="")
+    motif = models.CharField(max_length=250, blank=True, default="")
+    auteur = models.ForeignKey(Utilisateur, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-version"]

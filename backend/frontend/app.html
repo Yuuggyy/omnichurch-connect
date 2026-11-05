@@ -154,6 +154,7 @@ function construireNav(){
   if(perm("finances","consulter")) items.push(["finances","₣","Finances","Finance"]);
   if(perm("evenements","consulter")) items.push(["calendrier","▦","Calendrier","Calendar"]);
   if(perm("pastoral","consulter")) items.push(["pastoral","✝","Suivi pastoral","Pastoral care"]);
+  if(perm("documents","consulter")) items.push(["documents","❖","Documents","Documents"]);
   if(perm("intervenants","consulter")) items.push(["intervenants","♫","Intervenants","Speakers"]);
   if(perm("enfants","consulter")) items.push(["enfants","◕","Enfants","Children"]);
   if(perm("presences","consulter")) items.push(["presences","✓","Présences","Attendance"]);
@@ -1334,6 +1335,112 @@ async function lireMedia(id){
     <p class="muted" style="font-size:11px;margin-top:10px">${d.data.url}</p>`);
 }
 
+
+// ═══════════ Documents et actes officiels (Phase 5e) ═══════════
+async function vueDocuments(){
+  const [b, lis] = await Promise.all([api("/documents/bord/"), api("/documents/")]);
+  const k = b.success ? b.data : {};
+  const docs = lis.success ? lis.data.documents : [];
+  main.innerHTML = `
+  <div class="top"><h2>${t("Documents et actes officiels","Documents and official records")}</h2>
+    <div class="row">
+      <button class="btn ghost" onclick="telecharge('/documents/export/','documents.csv')">CSV</button>
+      ${perm("documents","creer")?`<button class="btn" onclick="formDocument()">+ ${t("Document","Document")}</button>`:""}
+    </div></div>
+  <div class="cards">
+    <div class="stat"><div class="n">${k.total||0}</div><div class="l">${t("DOCUMENTS","DOCUMENTS")}</div></div>
+    <div class="stat"><div class="n">${k.valides||0}</div><div class="l">${t("VALIDÉS","APPROVED")}</div></div>
+    <div class="stat"><div class="n">${k.brouillons||0}</div><div class="l">${t("BROUILLONS","DRAFTS")}</div></div>
+    <div class="stat"><div class="n">${k.expirant_30j||0}</div><div class="l">${t("EXPIRE SOUS 30 JOURS","EXPIRING 30 DAYS")}</div></div>
+    <div class="stat"><div class="n">${k.expires||0}</div><div class="l">${t("EXPIRÉS","EXPIRED")}</div></div>
+  </div>
+  <div class="panel" style="max-width:100%">
+    <table><thead><tr><th>${t("Numéro","Number")}</th><th>${t("Titre","Title")}</th><th>${t("Membre","Member")}</th>
+    <th>${t("Version","Version")}</th><th>${t("Statut","Status")}</th><th>${t("Expire","Expires")}</th><th></th></tr></thead>
+    <tbody>${docs.map(d=>`<tr>
+      <td style="font-family:'Space Mono',monospace;font-size:11px">${d.numero}</td>
+      <td>${d.titre}</td><td class="muted">${d.membre||"—"}</td>
+      <td class="muted">v${d.version}</td>
+      <td><span class="pill ${d.statut==="valide"?"okk":""}">${d.statut}</span></td>
+      <td class="${d.expire_bientot?"":"muted"}">${d.date_expiration||"—"}${d.expire_bientot?" ⚠":""}</td>
+      <td><button class="act" onclick="ouvreDocument(${d.id})">${t("Ouvrir","Open")}</button></td>
+    </tr>`).join("") || `<tr><td colspan="7" class="muted">${t("Aucun document.","No document yet.")}</td></tr>`}</tbody></table>
+  </div>`;
+}
+
+async function formDocument(){
+  const m = await api("/documents/modeles/");
+  const modeles = m.success ? m.data.modeles : [];
+  const types = m.success ? m.data.types : [];
+  ouvrirModale(t("Générer un document","Generate a document"), `
+    <label>${t("Type d'acte","Record type")}</label>
+    <select id="dc-type" onchange="majModeles()">${types.map(x=>`<option value="${x.code}">${x.libelle}</option>`).join("")}</select>
+    <label>${t("Modèle","Template")}</label>
+    <select id="dc-modele"><option value="">${t("Aucun (texte par défaut)","None (default text)")}</option>
+      ${modeles.map(x=>`<option value="${x.id}" data-type="${x.type}">${x.nom}${x.systeme?" · système":""}</option>`).join("")}</select>
+    <label>${t("Titre (facultatif)","Title (optional)")}</label><input id="dc-titre">
+    <label>${t("Identifiant du membre","Member ID")}</label><input id="dc-membre" placeholder="ex. 12">
+    <div class="row"><input id="dc-emis" type="date" style="flex:1"><input id="dc-expire" type="date" style="flex:1"></div>
+    <div class="row" style="margin-top:14px"><button class="btn" onclick="creeDocument()">${t("Générer","Generate")}</button></div>`);
+}
+
+function majModeles(){
+  const type = v("dc-type");
+  [...document.querySelectorAll("#dc-modele option")].forEach(o=>{
+    if(!o.dataset.type) return;
+    o.hidden = o.dataset.type !== type;
+  });
+  const sel = document.getElementById("dc-modele");
+  if(sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = "";
+}
+
+async function creeDocument(){
+  const d = await api("/document/generer/", {type:v("dc-type"), modele_id:v("dc-modele")||null,
+    titre:v("dc-titre"), membre_id:v("dc-membre")||null, date_emission:v("dc-emis"),
+    date_expiration:v("dc-expire")});
+  if(!d.success){ toast(d.error, true); return; }
+  fermeMod(); toast(t("Document "+d.data.document.numero+" généré","Document generated")); vueDocuments();
+}
+
+async function ouvreDocument(id){
+  const d = await api("/document/", {id});
+  if(!d.success){ toast(d.error, true); return; }
+  const x = d.data.document;
+  ouvrirModale(`${x.numero} · v${x.version}`, `
+    <div class="muted" style="font-size:12px;margin-bottom:10px">${x.titre} · ${x.statut}${x.membre?" · "+x.membre:""}</div>
+    <div style="white-space:pre-wrap;font-size:13px;line-height:1.65;border-left:2px solid var(--line);padding-left:12px">${x.contenu||"—"}</div>
+    <div class="muted" style="font-size:11.5px;margin-top:14px">${t("Historique","History")}</div>
+    ${(x.versions||[]).map(vv=>`<div style="font-size:11.5px">v${vv.version} · ${vv.date} · ${vv.motif||"—"} ${vv.auteur?"· "+vv.auteur:""}</div>`).join("")}
+    <div class="row" style="margin-top:14px;flex-wrap:wrap">
+      <button class="btn ghost" onclick="ouvrePdfDocument(${x.id})">PDF</button>
+      ${perm("documents","modifier")&&x.statut!=="archive"?`<button class="btn ghost" onclick="reediterDocument(${x.id})">${t("Rééditer","Reissue")}</button>`:""}
+      ${perm("documents","valider")&&x.statut!=="valide"?`<button class="btn" onclick="valideDocument(${x.id})">${t("Valider","Approve")}</button>`:""}
+    </div>`);
+}
+
+
+async function ouvrePdfDocument(id){
+  const r = await fetch(API+"/document/pdf/?id="+id, {headers:{"X-Auth-Token":TOKEN}});
+  if(!r.ok){ toast(t("PDF indisponible","PDF unavailable"), true); return; }
+  const url = URL.createObjectURL(await r.blob());
+  window.open(url, "_blank");
+  setTimeout(()=>URL.revokeObjectURL(url), 20000);
+}
+
+async function reediterDocument(id){
+  const motif = prompt(t("Motif de la réédition","Reason for reissue"));
+  if(motif === null) return;
+  const d = await api("/document/reediter/", {id, motif});
+  if(!d.success){ toast(d.error, true); return; }
+  toast(t("Réédité en version "+d.data.document.version,"Reissued")); ouvreDocument(id);
+}
+
+async function valideDocument(id){
+  const d = await api("/document/statut/", {id, statut:"valide"});
+  if(!d.success){ toast(d.error, true); return; }
+  toast(t("Document validé","Document approved")); ouvreDocument(id);
+}
+
 // ─── Calendrier (Phase 3) ───
 let CAL_MOIS = (function(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); })();
 let CAL_DATA = null;
@@ -1666,6 +1773,7 @@ async function afficherVue(){
   if(vue==="effectifs") return vueEffectifs();
   if(vue==="groupes") return vueGroupes();
   if(vue==="pastoral") return vuePastoral();
+  if(vue==="documents") return vueDocuments();
   if(vue==="intervenants") return vueIntervenants();
   if(vue==="enfants") return vueEnfants();
   if(vue==="presences"){ if(!MEMBRES_CACHE.length){ const dm=await api("/membres/?limit=100"); if(dm.success) MEMBRES_CACHE=dm.data.membres; } return vuePresences(); }

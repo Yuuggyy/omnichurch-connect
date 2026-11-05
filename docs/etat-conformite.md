@@ -152,6 +152,13 @@ Historique des actions réellement accomplies : visite à domicile, visite à l'
 Confidentialité réelle : trois niveaux, et un dossier confidentiel n'est lisible que par son responsable, son auteur et les détenteurs du droit de validation pastorale. Toute consultation ou modification d'un dossier confidentiel écrit une ligne dans le journal d'audit. Les notes pastorales vivent dans des tables distinctes et n'apparaissent jamais dans la fiche administrative d'un membre.
 Vérification : 35 tests automatisés, tous réussis (confidentialité, audit, isolation entre Églises, permissions). Déployé et testé en ligne le 5 novembre 2026.
 
+## 17. Documents et actes officiels — FAIT (Phase 5)
+Modèles réutilisables avec variables (nom, matricule, Église, dates, numéro) et douze types d'actes : certificats de baptême, de mariage, de consécration, attestations d'ordination, de transfert, de formation, de présence, carte de membre, procès-verbaux, rapports, documents internes et formulaires vierges.
+Numérotation unique par type et par année (BAP-2026-00001, TRA-2026-00001, PV-2026-00001…), jamais réutilisée. Garde-fou : un acte nominatif est refusé si aucun membre n'est indiqué, pour ne jamais imprimer un certificat vide.
+Réédition versionnée : chaque modification crée une version et conserve l'ancienne avec son motif et son auteur. Le document validé repasse en brouillon à la réédition. Statuts brouillon, validé, archivé ; un document archivé ne peut plus être réédité.
+PDF officiel avec en-tête de l'Église, numéro, version, date d'émission, date de validité, ligne de signature et sceau. Contrôle public d'authenticité par numéro (type, Église, statut, version, date). Recherche par nom, date, numéro, catégorie ou membre, filtre des documents qui expirent, alertes d'expiration à 30 jours, export CSV protégé par permission.
+Vérification : 32 tests automatisés, tous réussis, et PDF réel de 2 168 octets généré en ligne. Déployé le 5 novembre 2026.
+
 ## 18. Patrimoine et équipements — FAIT (Phase 5)
 Inventaire des biens durables : terrains, bâtiments, véhicules, mobilier, informatique, instruments, électroménager. Chaque bien porte un code unique par Église, une catégorie, une quantité, une date et un prix d'acquisition, une devise, un emplacement, un responsable membre, un état et un justificatif.
 Journal de vie du bien : acquisition, affectation, prêt, retour, entretien, réparation, réforme, constat d'inventaire, avec personne, lieu, coût et note. Une réparation remet le bien en bon état, une réforme le verrouille définitivement. Alertes permanentes sur les biens à réparer, hors service, sans justificatif ou sans responsable, plus le coût d'entretien de l'année. Valeur totale calculée par devise et export CSV de l'inventaire.

@@ -7,6 +7,7 @@ from . import views_patrimoine as pat
 from . import views_pastoral as pas
 from . import views_enfants as enf
 from . import views_intervenants as itv
+from . import views_documents as docm
 
 urlpatterns = [
     # Auth
@@ -158,6 +159,18 @@ urlpatterns = [
     path("media/creer/", itv.media_creer),
     path("media/modifier/", itv.media_modifier),
     path("media/ecouter/", itv.media_ecouter),
+    # ── Phase 5 : documents et actes officiels
+    path("documents/", docm.documents_liste),
+    path("documents/bord/", docm.documents_bord),
+    path("documents/modeles/", docm.modeles_liste),
+    path("documents/modele/creer/", docm.modele_creer),
+    path("document/", docm.document_detail),
+    path("document/generer/", docm.document_generer),
+    path("document/reediter/", docm.document_reediter),
+    path("document/statut/", docm.document_statut),
+    path("document/pdf/", docm.document_pdf),
+    path("document/verifier/", docm.document_verifier),
+    path("documents/export/", docm.documents_export),
     # ── Phase 2 : documents de base
     path("document/fiche/", m.document_fiche),
     path("document/carte/", m.document_carte),
