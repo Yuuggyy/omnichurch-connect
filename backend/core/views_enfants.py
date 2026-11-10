@@ -31,7 +31,16 @@ def _voit_sensible(user):
     return a_permission(user, "enfants", "valider")
 
 
-def _json_enfant(e, user):
+def _classes_map(eglise):
+    """Enfant -> classe active (une seule requete, pas de N+1)."""
+    map_ = {}
+    for i in InscriptionEnfant.objects.filter(eglise=eglise, active=True).select_related("classe"):
+        map_[i.enfant_id] = {"id": i.classe_id, "nom": i.classe.nom,
+                             "age_min": i.classe.age_min, "age_max": i.classe.age_max}
+    return map_
+
+
+def _json_enfant(e, user, classes_map=None):
     d = {"id": e.id, "code": e.code, "nom": e.nom, "postnom": e.postnom, "prenom": e.prenom,
          "sexe": e.sexe, "age": e.age(),
          "date_naissance": e.date_naissance.isoformat() if e.date_naissance else None,
@@ -41,6 +50,10 @@ def _json_enfant(e, user):
          "autorisation_photo": e.autorisation_photo, "autorisation_sortie": e.autorisation_sortie,
          "statut": e.statut,
          "autorises": e.autorises.filter(actif=True).count()}
+    if classes_map is not None:
+        c = classes_map.get(e.id)
+        d["classe"] = c["nom"] if c else ""
+        d["classe_id"] = c["id"] if c else None
     if _voit_sensible(user):
         d["sante"] = e.sante
         d["besoins"] = e.besoins
@@ -73,7 +86,9 @@ def enfants_liste(request):
         qs = qs.filter(Q(nom__icontains=q) | Q(prenom__icontains=q) | Q(code__icontains=q)
                        | Q(tuteur_nom__icontains=q) | Q(tuteur_telephone__icontains=q))
     total = qs.count()
-    return ok({"total": total, "enfants": [_json_enfant(x, request.utilisateur) for x in qs.distinct()[:120]]})
+    cmap = _classes_map(e)
+    return ok({"total": total,
+               "enfants": [_json_enfant(x, request.utilisateur, cmap) for x in qs.distinct()[:200]]})
 
 
 @auth_requise()
@@ -108,7 +123,7 @@ def enfant_detail(request):
         tracer(request.utilisateur, "enfants", "consulter_sensible", f"Fiche sensible consultée : {enf.code}")
     presences = enf.presences.all()[:30]
     incidents = enf.incidents.all()[:20]
-    return ok({"enfant": _json_enfant(enf, request.utilisateur),
+    return ok({"enfant": _json_enfant(enf, request.utilisateur, _classes_map(e)),
                "autorises": [{"id": a.id, "nom": a.nom, "lien": a.lien, "telephone": a.telephone,
                               "piece": a.piece} for a in enf.autorises.filter(actif=True)],
                "classes": [{"id": i.classe.id, "nom": i.classe.nom, "date": i.date.isoformat()}
@@ -405,4 +420,11 @@ def enfants_bord(request):
                "parents_non_informes": IncidentEnfant.objects.filter(eglise=e, parent_informe=False).count(),
                "sans_autorisation": sans_autorisation,
                "classes": ClasseEnfants.objects.filter(eglise=e, active=True).count(),
-               "enfants": [_json_enfant(x, request.utilisateur) for x in actifs[:40]]})
+               "classes_liste": [
+                   {"id": c.id, "nom": c.nom, "age_min": c.age_min, "age_max": c.age_max,
+                    "salle": c.salle, "capacite": c.capacite,
+                    "moniteur": c.moniteur.nom_complet if c.moniteur_id else "",
+                    "effectif": c.inscriptions.filter(active=True).count()}
+                   for c in ClasseEnfants.objects.filter(eglise=e, active=True).select_related("moniteur")
+               ],
+               "enfants": [_json_enfant(x, request.utilisateur, _classes_map(e)) for x in actifs[:200]]})

@@ -620,80 +620,165 @@ async function voirMembresGroupe(id){
     ${liste.map(m=>`<div style="padding:7px 0;border-bottom:1px solid rgba(139,148,168,.12);font-size:13px">${m.nom_complet} <span class="muted" style="margin:0">${m.matricule||""}</span></div>`).join("")||`<p class="muted">${t("Aucun membre.","No member.")}</p>`}`);
 }
 
-// ─── Présences ───
-async function vuePresences(evId){
+// ─── Activités et présences ───
+let ACTIVITE_COURANTE = null;
+let EV_TYPES = {};
+
+function esc(txt){ return String(txt==null?"":txt).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function dateCourte(iso){ if(!iso) return "—"; const p=String(iso).slice(0,10).split("-"); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:iso; }
+function libelleType(code){ return EV_TYPES[code] || code || "—"; }
+
+async function chargeEvenements(){
   const d = await api("/evenements/");
-  if(!d.success) return main.innerHTML = errBox(d.error);
-  EVENEMENTS_CACHE = d.data.evenements;
-  const courant = evId || EVENEMENT_COURANT || (EVENEMENTS_CACHE[0] && EVENEMENTS_CACHE[0].id);
-  EVENEMENT_COURANT = courant;
-  let bloc = "";
-  if(courant){
-    const p = await api("/presences/?evenement="+courant);
-    if(p.success){
-      PRESENCES_CACHE = p.data;
-      bloc = `<div class="cards">
-        <div class="stat"><div class="n">${p.data.total_identifies}</div><div class="l">${t("Présents identifiés","Identified present")}</div></div>
-        <div class="stat"><div class="n">${p.data.retards}</div><div class="l">${t("Retards","Late")}</div></div>
-        <div class="stat"><div class="n">${p.data.visiteurs}</div><div class="l">${t("Visiteurs","Visitors")}</div></div>
-        <div class="stat"><div class="n">${p.data.effectif_global}</div><div class="l">${t("Effectif global","Declared headcount")}</div></div>
+  if(d.success){
+    EVENEMENTS_CACHE = d.data.evenements || [];
+    (d.data.types||[]).forEach(function(x){ EV_TYPES[x.code] = x.label; });
+  }
+  return d;
+}
+
+function carteActivite(ev){
+  const desc = ev.description
+    ? `${esc(ev.description.slice(0,150))}${ev.description.length>150?"…":""}`
+    : `<span class="muted">${t("Aucune description","No description")}</span>`;
+  return `<div class="panel" style="max-width:none;margin-bottom:10px;cursor:pointer" onclick="vueActivite(${ev.id})">
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:1;min-width:220px">
+        <div class="kicker">${libelleType(ev.type)} · ${dateCourte(ev.date)}${ev.heure?" · "+esc(ev.heure):""}${ev.heure_fin?" – "+esc(ev.heure_fin):""}</div>
+        <h3 style="font-family:'Cormorant Garamond',serif;font-size:21px;margin:4px 0 2px">${esc(ev.titre)}</h3>
+        <div class="muted" style="font-size:12px;margin:0">${esc(ev.lieu)||t("Lieu non précisé","No venue")} ${ev.pointes?`· <span class="pill">${ev.pointes} ${t("pointages","check-ins")}</span>`:""}</div>
+        <div style="margin-top:8px;font-size:13px;color:var(--muted);line-height:1.45">${desc}</div>
       </div>
-      <div class="panel" style="max-width:none"><div class="kicker">${t("Pointage","Check-in")}</div>
-        <div class="row"><div><label>${t("Membre","Member")}</label><select id="p-membre">${MEMBRES_CACHE.map(m=>`<option value="${m.id}">${m.nom_complet} ${m.matricule?"· "+m.matricule:""}</option>`).join("")}</select></div>
+      <button class="btn ghost" onclick="event.stopPropagation();vueActivite(${ev.id})">${t("Ouvrir","Open")}</button>
+    </div>
+  </div>`;
+}
+
+async function vuePresences(){
+  ACTIVITE_COURANTE = null;
+  const d = await chargeEvenements();
+  if(!d.success) return main.innerHTML = errBox(d.error);
+  const auj = new Date().toISOString().slice(0,10);
+  main.innerHTML = kicker() + `<h1>${t("Activités et présences","Activities and attendance")}</h1>
+    <div class="top" style="align-items:flex-start">
+      <p class="muted" style="max-width:620px;margin:0">${t("Créez une activité, ouvrez-la pour lire la description complète et pointer les présences.","Create an activity, open it to read the full description and check people in.")}</p>
+      ${perm("evenements","creer")?`<button class="btn" onclick="formEvenement()">+ ${t("Nouvelle activité","New activity")}</button>`:""}
+    </div>
+    <div class="cards">
+      <div class="stat"><div class="n">${EVENEMENTS_CACHE.length}</div><div class="l">${t("ACTIVITÉS","ACTIVITIES")}</div></div>
+      <div class="stat"><div class="n">${EVENEMENTS_CACHE.filter(function(x){return x.date===auj;}).length}</div><div class="l">${t("AUJOURD'HUI","TODAY")}</div></div>
+      <div class="stat"><div class="n">${EVENEMENTS_CACHE.reduce(function(n,x){return n+(x.pointes||0);},0)}</div><div class="l">${t("POINTAGES","CHECK-INS")}</div></div>
+    </div>
+    <div style="margin-top:18px">${EVENEMENTS_CACHE.map(carteActivite).join("") || `<div class="panel">${t("Aucune activité pour le moment. Créez-en une pour commencer.","No activity yet. Create one to start.")}</div>`}</div>`;
+}
+
+function blocPointage(pdata){
+  return `<div class="cards">
+      <div class="stat"><div class="n">${pdata.total_identifies}</div><div class="l">${t("PRÉSENTS IDENTIFIÉS","IDENTIFIED PRESENT")}</div></div>
+      <div class="stat"><div class="n">${pdata.retards}</div><div class="l">${t("RETARDS","LATE")}</div></div>
+      <div class="stat"><div class="n">${pdata.visiteurs}</div><div class="l">${t("VISITEURS","VISITORS")}</div></div>
+      <div class="stat"><div class="n">${pdata.effectif_global}</div><div class="l">${t("EFFECTIF GLOBAL","HEADCOUNT")}</div></div>
+    </div>
+    <div class="panel" style="max-width:none"><div class="kicker">${t("Pointage","Check-in")}</div>
+      <div class="row">
+        <div><label>${t("Membre","Member")}</label><select id="p-membre">${MEMBRES_CACHE.map(function(m){return `<option value="${m.id}">${esc(m.nom_complet)} ${m.matricule?"· "+esc(m.matricule):""}</option>`;}).join("")}</select></div>
         <div><label>${t("Statut","Status")}</label><select id="p-statut"><option value="present">${t("Présent","Present")}</option><option value="retard">${t("Retard","Late")}</option><option value="absent">${t("Absent","Absent")}</option></select></div>
         <div><label>${t("Visiteur non enregistré","Unregistered visitor")}</label><input id="p-visiteur" placeholder="${t("Nom","Name")}"></div>
-        <div><label>${t("Effectif global","Declared headcount")}</label><input id="p-global" type="number" min="0"></div></div>
-        <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn" onclick="pointerMembre()">${t("Pointer le membre","Check in member")}</button>
-          <button class="btn ghost" onclick="pointerVisiteur()">+ ${t("Visiteur","Visitor")}</button>
-          <button class="btn ghost" onclick="pointerGlobal()">+ ${t("Effectif global","Headcount")}</button>
-        </div>
+        <div><label>${t("Effectif global","Declared headcount")}</label><input id="p-global" type="number" min="0"></div>
       </div>
-      <table><thead><tr><th>${t("Qui","Who")}</th><th>${t("Statut","Status")}</th><th>${t("Observation","Note")}</th><th></th></tr></thead>
-      <tbody>${p.data.presences.map(x=>`<tr><td>${x.membre||x.visiteur||"—"}<br><span style="color:var(--muted);font-size:11px">${x.matricule||""}</span></td>
-        <td>${x.effectif_global!==null?`<span class="pill">${x.effectif_global} ${t("non identifiés","unidentified")}</span>`:statutPill(x.statut)}</td>
-        <td>${x.observation||"—"}</td>
-        <td>${perm("presences","supprimer")?`<button class="act danger" onclick="supprimerPresence(${x.id})">✕</button>`:""}</td></tr>`).join("")||`<tr><td colspan="4" class="muted">${t("Aucun pointage.","No check-in yet.")}</td></tr>`}</tbody></table>`;
-    }
-  }
-  main.innerHTML = kicker() + `<h1>${t("Présences","Attendance")}</h1>
-    <div class="row" style="margin-top:16px">
-      <div><label>${t("Titre de l'activité","Activity title")}</label><input id="ev-titre" placeholder="${t("Culte du dimanche","Sunday service")}"></div>
-      <div><label>${t("Type","Type")}</label><select id="ev-type">${d.data.types.map(x=>`<option value="${x.code}">${x.label}</option>`).join("")}</select></div>
-      <div><label>${t("Date","Date")}</label><input id="ev-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div><label>${t("Heure","Time")}</label><input id="ev-heure" placeholder="09:00"></div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="pointerMembre()">${t("Pointer le membre","Check in member")}</button>
+        <button class="btn ghost" onclick="pointerVisiteur()">+ ${t("Visiteur","Visitor")}</button>
+        <button class="btn ghost" onclick="pointerGlobal()">+ ${t("Effectif global","Headcount")}</button>
+      </div>
+    </div>`;
+}
+
+function tableauPresences(pdata){
+  return `<table><thead><tr><th>${t("Qui","Who")}</th><th>${t("Statut","Status")}</th><th>${t("Observation","Note")}</th><th></th></tr></thead>
+    <tbody>${pdata.presences.map(function(x){return `<tr><td>${esc(x.membre||x.visiteur||"—")}<br><span style="color:var(--muted);font-size:11px">${esc(x.matricule)}</span></td>
+      <td>${x.effectif_global!==null?`<span class="pill">${x.effectif_global} ${t("non identifiés","unidentified")}</span>`:statutPill(x.statut)}</td>
+      <td>${esc(x.observation)||"—"}</td>
+      <td>${perm("presences","supprimer")?`<button class="act danger" onclick="supprimerPresence(${x.id})">✕</button>`:""}</td></tr>`;}).join("")||`<tr><td colspan="4" class="muted">${t("Aucun pointage.","No check-in yet.")}</td></tr>`}</tbody></table>`;
+}
+
+async function vueActivite(id){
+  const d = await chargeEvenements();
+  if(!d.success) return main.innerHTML = errBox(d.error);
+  const ev = EVENEMENTS_CACHE.find(function(x){ return x.id===id; });
+  if(!ev){ toast(t("Activité introuvable.","Activity not found."), true); return vuePresences(); }
+  ACTIVITE_COURANTE = id; EVENEMENT_COURANT = id;
+  let bloc = "";
+  const p = await api("/presences/?evenement="+id);
+  if(p.success){ PRESENCES_CACHE = p.data; bloc = blocPointage(p.data) + tableauPresences(p.data); }
+  else bloc = errBox(p.error);
+  main.innerHTML = kicker() + `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <button class="act" onclick="vuePresences()">← ${t("Activités","Activities")}</button>
+      ${perm("evenements","modifier")?`<button class="act" onclick="formEvenement(${ev.id})">${t("Modifier","Edit")}</button>`:""}
     </div>
-    <button class="btn" style="margin-top:14px" onclick="creerEvenement()">+ ${t("Créer l'activité","Create activity")}</button>
-    <div style="margin-top:22px;display:flex;gap:8px;flex-wrap:wrap">
-      ${EVENEMENTS_CACHE.map(x=>`<button class="act ${x.id===courant?"":""}" style="${x.id===courant?"border-color:var(--gold);color:var(--gold2)":""}" onclick="vuePresences(${x.id})">${x.titre} · ${x.date}</button>`).join("")||`<span class="muted">${t("Aucune activité.","No activity yet.")}</span>`}
+    <h1 style="margin-bottom:4px">${esc(ev.titre)}</h1>
+    <div class="muted" style="margin-bottom:16px">${libelleType(ev.type)} · ${dateCourte(ev.date)}${ev.heure?" · "+esc(ev.heure):""}${ev.heure_fin?" – "+esc(ev.heure_fin):""} · ${esc(ev.lieu)||t("Lieu non précisé","No venue")}${ev.statut?" · "+esc(ev.statut):""}</div>
+    <div class="panel" style="max-width:100%"><div class="kicker">${t("Description complète","Full description")}</div>
+      <div style="white-space:pre-wrap;line-height:1.6;font-size:14px">${ev.description?esc(ev.description):`<span class="muted">${t("Aucune description enregistrée. Utilisez « Modifier » pour l'ajouter.","No description saved. Use Edit to add one.")}</span>`}</div>
     </div>
     ${bloc}`;
 }
-async function creerEvenement(){
-  const v = x=>document.getElementById(x).value;
-  const d = await api("/evenement/creer/", {titre:v("ev-titre"), type:v("ev-type"), date:v("ev-date"), heure:v("ev-heure")});
-  if(d.success){ toast("✓ " + t("Activité créée","Activity created")); vuePresences(); } else toast(d.error, true);
+
+function formEvenement(id){
+  const ev = id ? EVENEMENTS_CACHE.find(function(x){return x.id===id;}) : null;
+  const types = Object.keys(EV_TYPES);
+  ouvrirModale(ev?t("Modifier l'activité","Edit activity"):t("Nouvelle activité","New activity"), `
+    <label>${t("Titre","Title")}</label><input id="ev-titre" value="${ev?esc(ev.titre):""}" placeholder="${t("Culte du dimanche","Sunday service")}">
+    <div class="row">
+      <div><label>${t("Type","Type")}</label><select id="ev-type">${types.map(function(c){return `<option value="${c}" ${ev&&ev.type===c?"selected":""}>${EV_TYPES[c]}</option>`;}).join("")}</select></div>
+      <div><label>${t("Date","Date")}</label><input id="ev-date" type="date" value="${ev?esc(ev.date):new Date().toISOString().slice(0,10)}"></div>
+    </div>
+    <div class="row">
+      <div><label>${t("Heure de début","Start time")}</label><input id="ev-heure" placeholder="09:00" value="${ev?esc(ev.heure):""}"></div>
+      <div><label>${t("Heure de fin","End time")}</label><input id="ev-fin" placeholder="11:00" value="${ev&&ev.heure_fin?esc(ev.heure_fin):""}"></div>
+    </div>
+    <label>${t("Lieu","Venue")}</label><input id="ev-lieu" value="${ev&&ev.lieu?esc(ev.lieu):""}">
+    <label>${t("Description complète","Full description")}</label>
+    <textarea id="ev-desc" rows="6" placeholder="${t("Ordre du jour, intervenants, consignes, matériel à prévoir...","Agenda, speakers, instructions, equipment...")}">${ev&&ev.description?esc(ev.description):""}</textarea>
+    <div class="row" style="margin-top:16px"><button class="btn" onclick="enregistreEvenement(${id||"null"})">${t("Enregistrer","Save")}</button></div>`);
 }
+
+async function enregistreEvenement(id){
+  const charge = {titre:v("ev-titre"), type:v("ev-type"), date:v("ev-date"), heure:v("ev-heure"),
+                  heure_fin:v("ev-fin"), lieu:v("ev-lieu"), description:v("ev-desc")};
+  let d;
+  if(id){ charge.id = id; d = await api("/evenement/modifier/", charge); }
+  else { d = await api("/evenement/creer/", charge); }
+  if(!d.success){ toast(d.error, true); return; }
+  fermeMod();
+  const newId = id || (d.data.evenement && d.data.evenement.id);
+  toast(id?t("Activité modifiée","Activity updated"):t("Activité créée","Activity created"));
+  await chargeEvenements();
+  if(newId) return vueActivite(newId);
+  return vuePresences();
+}
+
 async function pointerMembre(){
-  const d = await api("/presence/pointer/", {evenement:EVENEMENT_COURANT,
+  const d = await api("/presence/pointer/", {evenement:ACTIVITE_COURANTE,
     membre_id:document.getElementById("p-membre").value, statut:document.getElementById("p-statut").value});
-  if(d.success){ toast("✓ " + t("Pointage enregistré","Check-in saved")); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
+  if(d.success){ toast("✓ " + t("Pointage enregistré","Check-in saved")); vueActivite(ACTIVITE_COURANTE); } else toast(d.error, true);
 }
 async function pointerVisiteur(){
   const nom = document.getElementById("p-visiteur").value;
   if(!nom) return toast(t("Indiquez le nom du visiteur.","Enter the visitor name."), true);
-  const d = await api("/presence/pointer/", {evenement:EVENEMENT_COURANT, visiteur_nom:nom});
-  if(d.success){ toast("✓ " + t("Visiteur ajouté","Visitor added")); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
+  const d = await api("/presence/pointer/", {evenement:ACTIVITE_COURANTE, visiteur_nom:nom});
+  if(d.success){ toast("✓ " + t("Visiteur ajouté","Visitor added")); vueActivite(ACTIVITE_COURANTE); } else toast(d.error, true);
 }
 async function pointerGlobal(){
   const n = document.getElementById("p-global").value;
   if(n==="") return toast(t("Indiquez l'effectif.","Enter the headcount."), true);
-  const d = await api("/presence/pointer/", {evenement:EVENEMENT_COURANT, effectif_global:n});
-  if(d.success){ toast("✓ " + t("Effectif pointé","Headcount recorded")); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
+  const d = await api("/presence/pointer/", {evenement:ACTIVITE_COURANTE, effectif_global:n});
+  if(d.success){ toast("✓ " + t("Effectif pointé","Headcount recorded")); vueActivite(ACTIVITE_COURANTE); } else toast(d.error, true);
 }
 async function supprimerPresence(id){
   const d = await api("/presence/supprimer/", {id});
-  if(d.success){ toast("✓"); vuePresences(EVENEMENT_COURANT); } else toast(d.error, true);
+  if(d.success){ toast("✓"); vueActivite(ACTIVITE_COURANTE); } else toast(d.error, true);
 }
 
 // ─── Patrimoine (Phase 5) ───
@@ -1096,16 +1181,32 @@ function v(id){ const e = document.getElementById(id); return e ? e.value : ""; 
 
 
 // ═══════════ Enfants et école du dimanche (Phase 5c) ═══════════
+let ENFANTS_CACHE = [], CLASSES_ENFANTS = [], ENFANT_COURANT = null, CLASSE_FILTRE = null, RECHERCHE_ENFANT = "";
+
+function enfantNomComplet(x){ return [x.nom, x.postnom, x.prenom].filter(Boolean).join(" "); }
+
 async function vueEnfants(){
+  ENFANT_COURANT = null;
   const d = await api("/enfants/bord/");
   if(!d.success){ main.innerHTML = `<div class="panel">${d.error||"Erreur"}</div>`; return; }
   const b = d.data;
+  ENFANTS_CACHE = b.enfants || [];
+  CLASSES_ENFANTS = b.classes_liste || [];
+  const liste = ENFANTS_CACHE.filter(function(x){
+    const okClasse = !CLASSE_FILTRE || x.classe_id === CLASSE_FILTRE;
+    const q = RECHERCHE_ENFANT.trim().toLowerCase();
+    const okQ = !q || enfantNomComplet(x).toLowerCase().indexOf(q) >= 0
+      || (x.code||"").toLowerCase().indexOf(q) >= 0
+      || (x.tuteur_nom||"").toLowerCase().indexOf(q) >= 0
+      || (x.tuteur_telephone||"").indexOf(q) >= 0;
+    return okClasse && okQ;
+  });
   main.innerHTML = `
-  <div class="top"><h2>${t("Enfants et école du dimanche","Children and Sunday school")}</h2>
+  <div class="top" style="align-items:flex-start"><h2>${t("Enfants et école du dimanche","Children and Sunday school")}</h2>
     <div class="row">
       <button class="btn ghost" onclick="telecharge('/enfants/export/','enfants.csv')">CSV</button>
-      ${perm("enfants","creer")?`<button class="btn" onclick="formEnfant()">+ Enfant</button>
-      <button class="btn ghost" onclick="formClasse()">+ Classe</button>`:""}
+      ${perm("enfants","creer")?`<button class="btn" onclick="formEnfant()">+ ${t("Enfant","Child")}</button>
+      <button class="btn ghost" onclick="formClasse()">+ ${t("Classe","Class")}</button>`:""}
     </div></div>
   <div class="cards">
     <div class="stat"><div class="n">${b.actifs}</div><div class="l">${t("ENFANTS ACTIFS","ACTIVE CHILDREN")}</div></div>
@@ -1115,40 +1216,180 @@ async function vueEnfants(){
     <div class="stat"><div class="n">${b.parents_non_informes}</div><div class="l">${t("PARENTS NON INFORMÉS","PARENTS NOT TOLD")}</div></div>
     <div class="stat"><div class="n">${b.sans_autorisation}</div><div class="l">${t("SANS PERSONNE AUTORISÉE","NO AUTHORISED PICKUP")}</div></div>
   </div>
+
   <div class="panel" style="max-width:100%">
-    <h3 style="font-family:'Cormorant Garamond',serif;margin-bottom:12px">${t("Fiches des enfants","Children")}</h3>
-    <table><thead><tr><th>${t("Code","Code")}</th><th>${t("Nom","Name")}</th><th>${t("Âge","Age")}</th>
-    <th>${t("Tuteur","Guardian")}</th><th>${t("Sortie","Pickup")}</th><th></th></tr></thead>
-    <tbody>${b.enfants.map(x=>`<tr>
-      <td style="font-family:'Space Mono',monospace;font-size:11px">${x.code}</td>
-      <td>${x.nom} ${x.prenom||""}</td><td>${x.age===null?"—":x.age}</td>
-      <td>${x.tuteur_nom||"—"}<br><span class="muted" style="font-size:11px">${x.tuteur_telephone||""}</span></td>
+    <div class="kicker">${t("Classes et tranches d'âge","Classes and age ranges")}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="act ${CLASSE_FILTRE===null?"gold":""}" style="${CLASSE_FILTRE===null?"border-color:var(--gold);color:var(--gold2)":""}" onclick="filtreClasse(null)">${t("Toutes","All")} · ${ENFANTS_CACHE.length}</button>
+      ${CLASSES_ENFANTS.map(function(c){return `<button class="act" style="${CLASSE_FILTRE===c.id?"border-color:var(--gold);color:var(--gold2)":""}" onclick="filtreClasse(${c.id})">
+        <b>${esc(c.nom)}</b> · ${c.age_min}–${c.age_max} ${t("ans","yrs")} · ${c.effectif}/${c.capacite||"∞"}${c.moniteur?" · "+esc(c.moniteur):""}</button>`;}).join("") || `<span class="muted">${t("Aucune classe créée.","No class yet.")}</span>`}
+    </div>
+  </div>
+
+  <div class="panel" style="max-width:100%">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <h3 style="font-family:'Cormorant Garamond',serif;margin:0">${t("Tableau des enfants","Children table")}</h3>
+      <input id="enf-q" placeholder="${t("Rechercher nom, code, tuteur, téléphone","Search name, code, guardian, phone")}" value="${esc(RECHERCHE_ENFANT)}" style="max-width:320px" oninput="rechercheEnfant(this.value)">
+    </div>
+    <table><thead><tr>
+      <th>${t("Code","Code")}</th><th>${t("Enfant","Child")}</th><th>${t("Sexe","Sex")}</th><th>${t("Âge","Age")}</th>
+      <th>${t("Classe","Class")}</th><th>${t("Tuteur","Guardian")}</th><th>${t("Sortie","Pickup")}</th><th></th></tr></thead>
+    <tbody>${liste.map(function(x){return `<tr style="cursor:pointer" onclick="vueEnfant(${x.id})">
+      <td style="font-family:'Space Mono',monospace;font-size:11px">${esc(x.code)}</td>
+      <td><b>${esc(enfantNomComplet(x))}</b></td>
+      <td>${x.sexe==="M"?t("M","M"):x.sexe==="F"?t("F","F"):"—"}</td>
+      <td>${x.age===null||x.age===undefined?"—":x.age}</td>
+      <td>${x.classe?esc(x.classe):`<span class="muted">${t("non affecté","not assigned")}</span>`}</td>
+      <td>${esc(x.tuteur_nom)||"—"}<br><span class="muted" style="font-size:11px">${esc(x.tuteur_telephone)}</span></td>
       <td>${x.autorisation_sortie?"✓":"<span class='pill bad'>?</span>"} · ${x.autorises}</td>
-      <td><button class="act" onclick="enfDetail(${x.id})">${t("Ouvrir","Open")}</button></td></tr>`).join("")
-      ||`<tr><td colspan="6" class="muted">${t("Aucun enfant enregistré.","No child yet.")}</td></tr>`}</tbody></table>
+      <td><button class="act" onclick="event.stopPropagation();vueEnfant(${x.id})">${t("Fiche","Open")}</button></td></tr>`;}).join("")
+      ||`<tr><td colspan="8" class="muted">${t("Aucun enfant ne correspond.","No child matches.")}</td></tr>`}</tbody></table>
   </div>`;
+}
+
+function filtreClasse(id){ CLASSE_FILTRE = id; vueEnfants(); }
+function rechercheEnfant(q){ RECHERCHE_ENFANT = q; vueEnfants(); }
+
+async function vueEnfant(id){
+  ENFANT_COURANT = id;
+  const d = await api("/enfant/", {id});
+  if(!d.success){ toast(d.error, true); return vueEnfants(); }
+  const e = d.data.enfant, autorises = d.data.autorises||[], classes = d.data.classes||[];
+  const presences = d.data.presences||[], incidents = d.data.incidents||[];
+  const ligne = function(label, valeur){ return `<tr><td style="width:38%"><b>${label}</b></td><td>${valeur||"—"}</td></tr>`; };
+  const classeCourante = classes.length ? classes[classes.length-1].nom : "";
+  const optionsClasses = CLASSES_ENFANTS.map(function(c){return `<option value="${c.id}">${esc(c.nom)} (${c.age_min}–${c.age_max} ${t("ans","yrs")})</option>`;}).join("");
+  main.innerHTML = kicker() + `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <button class="act" onclick="vueEnfants()">← ${t("Enfants","Children")}</button>
+      ${perm("enfants","modifier")?`<button class="act" onclick="affecterEnfant(${e.id})">${t("Affecter à une classe","Assign class")}</button>`:""}
+    </div>
+    <h1 style="margin-bottom:2px">${esc(enfantNomComplet(e))}</h1>
+    <div class="muted" style="margin-bottom:16px">${esc(e.code)} · ${e.age===null||e.age===undefined?"":e.age+" "+t("ans","years")+" · "}${classeCourante?esc(classeCourante)+" · ":""}${esc(e.statut)}</div>
+
+    <div class="panel" style="max-width:100%"><div class="kicker">${t("Identité","Identity")}</div>
+      <table><tbody>
+        ${ligne(t("Code enfant","Child code"), `<span style="font-family:'Space Mono',monospace">${esc(e.code)}</span>`)}
+        ${ligne(t("Nom","Last name"), esc(e.nom))}
+        ${ligne(t("Postnom","Middle name"), esc(e.postnom))}
+        ${ligne(t("Prénom","First name"), esc(e.prenom))}
+        ${ligne(t("Sexe","Sex"), e.sexe==="M"?t("Masculin","Male"):e.sexe==="F"?t("Féminin","Female"):"—")}
+        ${ligne(t("Date de naissance","Date of birth"), e.date_naissance?dateCourte(e.date_naissance):"—")}
+        ${ligne(t("Âge","Age"), e.age===null||e.age===undefined?"—":e.age+" "+t("ans","years"))}
+        ${ligne(t("Classe actuelle","Current class"), classeCourante?esc(classeCourante):`<span class="muted">${t("non affecté","not assigned")}</span>`)}
+        ${ligne(t("Statut","Status"), esc(e.statut))}
+      </tbody></table>
+    </div>
+
+    <div class="panel" style="max-width:100%"><div class="kicker">${t("Tuteur et urgences","Guardian and emergencies")}</div>
+      <table><tbody>
+        ${ligne(t("Tuteur","Guardian"), esc(e.tuteur_nom)+(e.tuteur_lien?` · ${esc(e.tuteur_lien)}`:""))}
+        ${ligne(t("Téléphone tuteur","Guardian phone"), e.tuteur_telephone?`<a href="tel:${esc(e.tuteur_telephone)}">${esc(e.tuteur_telephone)}</a>`:"—")}
+        ${ligne(t("Contact d'urgence","Emergency contact"), esc(e.urgence_nom))}
+        ${ligne(t("Téléphone urgence","Emergency phone"), e.urgence_telephone?`<a href="tel:${esc(e.urgence_telephone)}">${esc(e.urgence_telephone)}</a>`:"—")}
+      </tbody></table>
+    </div>
+
+    <div class="panel" style="max-width:100%"><div class="kicker">${t("Santé et autorisations","Health and consents")}</div>
+      ${e.sensible_restreint
+        ? `<div class="pill bad">${t("Données de santé masquées : droit de validation requis","Health data hidden: validation right required")}</div>`
+        : `<table><tbody>
+            ${ligne(t("Informations de santé","Health"), esc(e.sante))}
+            ${ligne(t("Besoins particuliers","Special needs"), esc(e.besoins))}
+           </tbody></table>`}
+      <table><tbody>
+        ${ligne(t("Autorisation photo","Photo consent"), e.autorisation_photo?"✓ "+t("accordée","granted"):"✗ "+t("non accordée","not granted"))}
+        ${ligne(t("Autorisation de sortie","Pickup consent"), e.autorisation_sortie?"✓ "+t("accordée","granted"):`<span class="pill bad">${t("manquante","missing")}</span>`)}
+      </tbody></table>
+    </div>
+
+    <div class="panel" style="max-width:100%"><div class="kicker">${t("Personnes autorisées à récupérer l'enfant","Authorised pickups")}</div>
+      ${autorises.map(function(a){return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)">
+        <span><b>${esc(a.nom)}</b> ${a.lien?`· ${esc(a.lien)}`:""} ${a.telephone?`· ${esc(a.telephone)}`:""}</span>
+        ${perm("enfants","modifier")?`<button class="act danger" onclick="retirerAutorise(${a.id})">✕</button>`:""}</div>`;}).join("")
+        || `<div class="muted" style="font-size:12.5px">${t("Aucune personne autorisée.","None yet.")}</div>`}
+      ${perm("enfants","modifier")?`<div class="row" style="margin-top:10px">
+        <input id="au-nom" placeholder="${t("Nom","Name")}" style="flex:2">
+        <input id="au-lien" placeholder="${t("Lien","Relation")}" style="flex:1">
+        <input id="au-tel" placeholder="${t("Téléphone","Phone")}" style="flex:1">
+        <button class="btn ghost" onclick="ajouteAutorise(${e.id})">${t("Ajouter","Add")}</button></div>`:""}
+    </div>
+
+    <div class="panel" style="max-width:100%"><div class="kicker">${t("Présence du jour","Today's attendance")}</div>
+      <div class="row">
+        <button class="btn ghost" onclick="pointeEnfant(${e.id},'present')">${t("Présent","Present")}</button>
+        <button class="btn ghost" onclick="pointeEnfant(${e.id},'retard')">${t("Retard","Late")}</button>
+        <button class="btn ghost" onclick="pointeEnfant(${e.id},'absent')">${t("Absent","Absent")}</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <select id="so-auto" style="flex:1"><option value="">${t("Personne autorisée","Authorised person")}</option>${autorises.map(function(a){return `<option value="${a.id}">${esc(a.nom)}</option>`;}).join("")}</select>
+        <input id="so-heure" placeholder="12:00" style="width:90px">
+        <button class="btn" onclick="sortieEnfant(${e.id})">${t("Enregistrer le départ","Record pickup")}</button>
+      </div>
+    </div>
+
+    <div class="panel" style="max-width:100%"><div class="kicker">${t("Historique de présence","Attendance history")}</div>
+      <table><thead><tr><th>${t("Date","Date")}</th><th>${t("Statut","Status")}</th><th>${t("Départ","Pickup")}</th><th>${t("Récupéré par","Picked up by")}</th></tr></thead>
+      <tbody>${presences.map(function(p){return `<tr><td>${dateCourte(p.date)}</td><td>${statutPill(p.statut)}</td><td>${esc(p.depart)||"—"}</td><td>${esc(p.recupere_par)||"—"}</td></tr>`;}).join("")
+        ||`<tr><td colspan="4" class="muted">${t("Aucune présence enregistrée.","No attendance yet.")}</td></tr>`}</tbody></table>
+    </div>
+
+    <div class="panel" style="max-width:100%"><div class="kicker">${t("Incidents","Incidents")}</div>
+      <table><thead><tr><th>${t("Date","Date")}</th><th>${t("Type","Type")}</th><th>${t("Gravité","Severity")}</th><th>${t("Parent informé","Parent told")}</th></tr></thead>
+      <tbody>${incidents.map(function(i){return `<tr><td>${dateCourte(i.date)}</td><td>${esc(i.type)}</td><td>${esc(i.gravite)}</td><td>${i.parent_informe?"✓":"<span class='pill bad'>"+t("non","no")+"</span>"}</td></tr>`;}).join("")
+        ||`<tr><td colspan="4" class="muted">${t("Aucun incident.","No incident.")}</td></tr>`}</tbody></table>
+    </div>
+
+    <div style="display:none"><select id="aff-classe">${optionsClasses}</select></div>`;
+}
+
+function affecterEnfant(id){
+  const options = CLASSES_ENFANTS.map(function(c){return `<option value="${c.id}">${esc(c.nom)} (${c.age_min}–${c.age_max} ${t("ans","yrs")} · ${c.effectif}/${c.capacite||"∞"})</option>`;}).join("");
+  ouvrirModale(t("Affecter à une classe","Assign to a class"), `
+    <label>${t("Classe","Class")}</label><select id="af-classe">${options||`<option value="">—</option>`}</select>
+    <div class="row" style="margin-top:16px"><button class="btn" onclick="enregistreAffectation(${id})">${t("Affecter","Assign")}</button></div>`);
+}
+
+async function enregistreAffectation(id){
+  const d = await api("/enfants/affecter/", {enfant_id:id, classe_id:v("af-classe"), annee_scolaire:String(new Date().getFullYear())});
+  if(!d.success){ toast(d.error, true); return; }
+  fermeMod(); toast(t("Enfant affecté","Child assigned")); vueEnfant(id);
+}
+
+async function retirerAutorise(id){
+  const d = await api("/enfant/autorise/retirer/", {id});
+  if(!d.success){ toast(d.error, true); return; }
+  toast(t("Personne retirée","Removed")); if(ENFANT_COURANT) vueEnfant(ENFANT_COURANT);
 }
 
 function formEnfant(){
   ouvrirModale(t("Nouvelle fiche enfant","New child"), `
-    <label>Nom</label><input id="en-nom"><label>Prénom</label><input id="en-prenom">
-    <label>Date de naissance</label><input id="en-naissance" type="date">
-    <label>Tuteur</label><input id="en-tuteur"><label>Téléphone tuteur</label><input id="en-tel">
-    <label>Contact d'urgence</label><input id="en-urgence"><label>Téléphone urgence</label><input id="en-urgence-tel">
+    <div class="row"><div><label>Nom</label><input id="en-nom"></div>
+      <div><label>Postnom</label><input id="en-postnom"></div>
+      <div><label>Prénom</label><input id="en-prenom"></div></div>
+    <div class="row"><div><label>Sexe</label><select id="en-sexe"><option value="">—</option><option value="M">M</option><option value="F">F</option></select></div>
+      <div><label>Date de naissance</label><input id="en-naissance" type="date"></div></div>
+    <div class="row"><div><label>Tuteur</label><input id="en-tuteur"></div>
+      <div><label>Lien</label><input id="en-lien"></div>
+      <div><label>Téléphone tuteur</label><input id="en-tel"></div></div>
+    <div class="row"><div><label>Contact d'urgence</label><input id="en-urgence"></div>
+      <div><label>Téléphone urgence</label><input id="en-urgence-tel"></div></div>
     <label>Informations de santé (accès restreint)</label><textarea id="en-sante"></textarea>
+    <label>Besoins particuliers</label><textarea id="en-besoins"></textarea>
     <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="en-photo"> Autorisation photo</label>
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="en-sortie"> Autorisation de sortie</label>
     <div class="row" style="margin-top:16px"><button class="btn" onclick="creeEnfant()">${t("Enregistrer","Save")}</button></div>`);
 }
 
 async function creeEnfant(){
-  const d = await api("/enfant/creer/", {nom:v("en-nom"), prenom:v("en-prenom"), date_naissance:v("en-naissance"),
-    tuteur_nom:v("en-tuteur"), tuteur_telephone:v("en-tel"), urgence_nom:v("en-urgence"),
-    urgence_telephone:v("en-urgence-tel"), sante:v("en-sante"),
+  const d = await api("/enfant/creer/", {nom:v("en-nom"), postnom:v("en-postnom"), prenom:v("en-prenom"), sexe:v("en-sexe"),
+    date_naissance:v("en-naissance"), tuteur_nom:v("en-tuteur"), tuteur_lien:v("en-lien"), tuteur_telephone:v("en-tel"),
+    urgence_nom:v("en-urgence"), urgence_telephone:v("en-urgence-tel"), sante:v("en-sante"), besoins:v("en-besoins"),
     autorisation_photo:document.getElementById("en-photo").checked,
     autorisation_sortie:document.getElementById("en-sortie").checked});
   if(!d.success){ toast(d.error, true); return; }
-  fermeMod(); toast(t("Fiche créée : "+d.data.enfant.code,"Child saved")); rafraichirVue();
+  fermeMod(); toast(t("Fiche créée : "+d.data.enfant.code,"Child saved"));
+  vueEnfant(d.data.enfant.id);
 }
 
 function formClasse(){
@@ -1163,52 +1404,26 @@ async function creeClasse(){
   const d = await api("/enfants/classe/creer/", {nom:v("cl-nom"), age_min:v("cl-min"), age_max:v("cl-max"),
     salle:v("cl-salle"), capacite:v("cl-cap")});
   if(!d.success){ toast(d.error, true); return; }
-  fermeMod(); toast(t("Classe créée","Class created")); rafraichirVue();
-}
-
-async function enfDetail(id){
-  const d = await api("/enfant/", {id});
-  if(!d.success){ toast(d.error, true); return; }
-  const e = d.data.enfant;
-  ouvrirModale(`${e.nom} ${e.prenom||""}`, `
-    <div class="muted" style="font-size:12px;margin-bottom:10px">${e.code} · ${e.age===null?"":e.age+" "+t("ans","years")} · ${t("tuteur","guardian")}: ${e.tuteur_nom||"—"} ${e.tuteur_telephone||""}</div>
-    ${e.sensible_restreint?`<div class="pill bad">${t("Données de santé masquées","Health data hidden")}</div>`:
-      `<div style="margin:8px 0;font-size:12.5px"><b>${t("Santé","Health")}:</b> ${e.sante||"—"}<br><b>${t("Besoins particuliers","Special needs")}:</b> ${e.besoins||"—"}</div>`}
-    <h4 style="margin:14px 0 6px">${t("Personnes autorisées","Authorised pickups")}</h4>
-    ${(d.data.autorises||[]).map(a=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)">${a.nom} <span class="muted">${a.lien||""} ${a.telephone||""}</span></div>`).join("")||`<div class="muted" style="font-size:12px">${t("Aucune personne autorisée.","None yet.")}</div>`}
-    <div class="row" style="margin-top:8px"><input id="au-nom" placeholder="${t("Nom","Name")}" style="flex:2">
-      <input id="au-lien" placeholder="${t("Lien","Relation")}" style="flex:1"></div>
-    <div class="row"><input id="au-tel" placeholder="${t("Téléphone","Phone")}" style="flex:1">
-      <button class="btn ghost" onclick="ajouteAutorise(${id})">${t("Ajouter","Add")}</button></div>
-    <h4 style="margin:14px 0 6px">${t("Pointage du jour","Today")}</h4>
-    <div class="row"><button class="btn ghost" onclick="pointeEnfant(${id},'present')">${t("Présent","Present")}</button>
-      <button class="btn ghost" onclick="pointeEnfant(${id},'retard')">${t("Retard","Late")}</button>
-      <button class="btn ghost" onclick="pointeEnfant(${id},'absent')">${t("Absent","Absent")}</button></div>
-    <div class="row" style="margin-top:8px"><select id="so-auto" style="flex:1">${(d.data.autorises||[]).map(a=>`<option value="${a.id}">${a.nom}</option>`).join("")}</select>
-      <input id="so-heure" placeholder="12:00" style="width:80px">
-      <button class="btn" onclick="sortieEnfant(${id})">${t("Départ","Pickup")}</button></div>
-    <h4 style="margin:14px 0 6px">${t("Dernières présences","Recent attendance")}</h4>
-    <div style="font-size:12px">${(d.data.presences||[]).slice(0,6).map(p=>`${p.date} · ${p.statut} ${p.recupere_par?"· "+p.recupere_par:""}`).join("<br>")||"—"}</div>`);
+  fermeMod(); toast(t("Classe créée","Class created")); vueEnfants();
 }
 
 async function ajouteAutorise(id){
   const d = await api("/enfant/autorise/", {enfant_id:id, nom:v("au-nom"), lien:v("au-lien"), telephone:v("au-tel")});
   if(!d.success){ toast(d.error, true); return; }
-  toast(t("Personne autorisée ajoutée","Pickup person added")); enfDetail(id);
+  toast(t("Personne autorisée ajoutée","Pickup person added")); vueEnfant(id);
 }
 
 async function pointeEnfant(id, statut){
   const d = await api("/enfants/pointer/", {enfant_id:id, statut, arrivee:new Date().toTimeString().slice(0,5)});
   if(!d.success){ toast(d.error, true); return; }
-  toast(t("Pointage enregistré","Attendance saved")); enfDetail(id);
+  toast(t("Pointage enregistré","Attendance saved")); vueEnfant(id);
 }
 
 async function sortieEnfant(id){
   const d = await api("/enfants/sortie/", {enfant_id:id, autorise_id:v("so-auto"), heure:v("so-heure")});
   if(!d.success){ toast(d.error, true); return; }
-  toast(t("Départ enregistré","Pickup saved")); enfDetail(id);
+  toast(t("Départ enregistré","Pickup saved")); vueEnfant(id);
 }
-
 
 // ═══════════ Intervenants et médiathèque (Phase 5d) ═══════════
 let ITV_ONGLET = "repertoire";

@@ -509,6 +509,8 @@ def evenements_liste(request):
     qs = Evenement.objects.filter(eglise=e).select_related("groupe")[:80]
     return ok({"evenements": [{"id": x.id, "titre": x.titre, "type": x.type,
                                "date": x.date.isoformat(), "heure": x.heure,
+                               "heure_fin": x.heure_fin, "statut": x.statut,
+                               "description": x.description, "capacite": x.capacite,
                                "lieu": x.lieu, "groupe": x.groupe.nom if x.groupe_id else None,
                                "pointes": x.presences.count()} for x in qs],
                "types": [{"code": c, "label": l} for c, l in Evenement.TYPES]})

@@ -63,6 +63,7 @@ def _json_ev(ev, jour=None):
         "duree_minutes": ev.duree(),
         "journee_entiere": ev.journee_entiere,
         "lieu": ev.lieu,
+        "description": ev.description,
         "statut": ev.statut,
         "recurrence": ev.recurrence,
         "capacite": ev.capacite,
